@@ -15,6 +15,10 @@ void Shutdown_Kernel() {
 	FreeLibrary(User_Programs);
 }
 
+/*
+	Implementace systémováho volání.
+	regs: registr rax.h by mìl obsahovat èíslo OS služby která se má volat (syscall který je potøeba vykonat).
+*/
 void __stdcall Sys_Call(kiv_hal::TRegisters &regs) {
 
 	switch (static_cast<kiv_os::NOS_Service_Major>(regs.rax.h)) {

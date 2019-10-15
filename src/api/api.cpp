@@ -16,11 +16,20 @@ kiv_hal::TInterrupt_Handler *interrupt_descriptor_table;
 namespace kiv_hal {
 
 	#ifdef KERNEL
+		/*
+			Nastaví handler pro dané pøerušení.
+			interrupt: èíslo pøerušení.
+			handler: obsluha pøerušení.
+		*/
 		void Set_Interrupt_Handler(kiv_hal::NInterrupt interrupt, kiv_hal::TInterrupt_Handler handler) {
 			interrupt_descriptor_table[static_cast<uint8_t>(interrupt)] = handler;
 		}
 	#endif
 
+	/*
+		Implementace volání obsluhy pøerušení. v IDT je je adresa na rutinu, interrupt je èíslo pøerušení a context je 
+		souèasný kontext vlákna.
+	*/
 	void Call_Interrupt_Handler(kiv_hal::NInterrupt interrupt, kiv_hal::TRegisters &context) {
 		interrupt_descriptor_table[static_cast<uint8_t>(interrupt)](context);
 		

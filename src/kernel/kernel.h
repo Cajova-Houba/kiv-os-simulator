@@ -5,4 +5,8 @@
 #include "..\api\api.h"
 
 void Set_Error(const bool failed, kiv_hal::TRegisters &regs);
+
+/*
+	Obsluha pøerušení, která zavede OS.
+*/
 void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &context);

@@ -41,6 +41,9 @@ namespace kiv_hal {
 
 	struct TRegisters;
 
+	/*
+		Prototyp funkce, která realizuje syscall. Tzn pointer (myslím?) na tuhle fci bude umístìn v IDT.
+	*/
 	using TInterrupt_Handler = void(__stdcall *)(TRegisters &context);			//prototyp funkce, ktera realizuje syscall
 	using TInterrupt_Descriptor_Table = TInterrupt_Handler*;					//ziskani ukazatele na tabulku se deje v dllmain.cpp, ktery nemate povoleno menit
 	
