@@ -17,7 +17,11 @@ namespace kiv_os {
 
 	using THandle = uint16_t;  //16-bitu, aby se zabranilo predavani instanci trid mezi jadrem a procesem 
 							   //namisto integerovych handlu jako v realnem OS
-	constexpr THandle Invalid_Handle = static_cast<kiv_os::THandle>(-1);		//neplatny handle 
+
+	/*
+		Konstanta pro neplatný handle.
+	*/
+	constexpr THandle Invalid_Handle = static_cast<kiv_os::THandle>(-1);
 
 	struct TDir_Entry {
 		uint16_t file_attributes;			//viz konstanty NFile_Attributes

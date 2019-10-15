@@ -4,10 +4,20 @@
 #include <mutex>
 #include <random>
 
+/*
+	Interní úložištì handlerù.
+ */
 std::map<kiv_os::THandle, HANDLE> Handles;
+
+/*
+	Mutex použitý pøi pøístupu k úložišti handlù.
+ */
 std::mutex Handles_Guard;
 kiv_os::THandle Last_Handle = 0;
 
+/*
+	Generátor pseudonáhodných èísel v rozsahu <1,6>.
+*/
 std::random_device rd;
 std::mt19937 gen(rd());
 std::uniform_int_distribution<> dis(1, 6);

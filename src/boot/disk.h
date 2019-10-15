@@ -44,5 +44,7 @@ public:
 	virtual void Write_Sectors(kiv_hal::TRegisters &context) final;
 };
 
-
+/*
+	Obsluha preruseni od disku.
+*/
 void __stdcall Disk_Handler(kiv_hal::TRegisters &context);

@@ -2,10 +2,14 @@
 
 #include <cstdint>
 
-//HAL aka hardware abstraction layer for the kiv_os namespace
-
+/*
+	HAL aka hardware abstraction layer for the kiv_os namespace.
+*/
 namespace kiv_hal {
 
+	/*
+		General registery: r,e or x s nižší a vyšší polovinou. 
+	*/
 	struct TGeneral_Register {
 		union {
 			uint64_t r;			//e.g., rax
@@ -18,6 +22,7 @@ namespace kiv_hal {
 		};
 	};
 
+
 	struct TIndex_Register {
 		union {
 			uint64_t r;			//e.g., rdi
@@ -26,6 +31,9 @@ namespace kiv_hal {
 		};
 	};
 
+	/*
+		Vlajky CPU.
+	*/
 	struct TFlags {
 		std::uint8_t carry : 1;
 		std::uint8_t non_zero : 1;
@@ -36,9 +44,15 @@ namespace kiv_hal {
 	using TInterrupt_Handler = void(__stdcall *)(TRegisters &context);			//prototyp funkce, ktera realizuje syscall
 	using TInterrupt_Descriptor_Table = TInterrupt_Handler*;					//ziskani ukazatele na tabulku se deje v dllmain.cpp, ktery nemate povoleno menit
 	
-
-	const uint32_t Expected_Tls_IDT_Index = 1;					//k ziskani ukazatele na tabulku vektoru preruseni pouzijeme TLS s ocekavanou hodnotu TLS indexu
+	/*
+		K ziskani ukazatele na tabulku vektoru preruseni pouzijeme TLS s ocekavanou hodnotu TLS indexu.
+		TLS = Thread level storage (?).
+	*/
+	const uint32_t Expected_Tls_IDT_Index = 1;					
 	
+	/*
+		Sada registrù, kontext programu.
+	*/
 	struct TRegisters {
 		TGeneral_Register rax, rbx, rcx, rdx;
 		TIndex_Register rdi;

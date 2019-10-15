@@ -11,9 +11,11 @@ extern kiv_hal::TInterrupt_Handler* interrupt_descriptor_table;
 kiv_hal::TInterrupt_Handler interrupt_descriptor_table_storage[256];
 
 bool Init_IDT() {
+	// umistime tabulku deskriptoru preruseni na adresu 0
 	memset(interrupt_descriptor_table_storage, 0, sizeof(interrupt_descriptor_table_storage));
 	interrupt_descriptor_table = interrupt_descriptor_table_storage;
 
+	// nastaveni prepruseni pro VGA, Disk IO a klavesnici
 	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::VGA_BIOS, VGA_Handler);
 	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, Disk_Handler);
 	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::Keyboard, Keyboard_Handler);
