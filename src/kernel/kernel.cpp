@@ -8,10 +8,12 @@ HMODULE User_Programs;
 
 
 void Initialize_Kernel() {
+	// nacteni uzivatelskeho shellu
 	User_Programs = LoadLibraryW(L"user.dll");
 }
 
 void Shutdown_Kernel() {
+	// uvolneni shellu
 	FreeLibrary(User_Programs);
 }
 
@@ -32,7 +34,10 @@ void __stdcall Sys_Call(kiv_hal::TRegisters &regs) {
 }
 
 void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &context) {
+	// inicializace krenelu (naètení shellu)
 	Initialize_Kernel();
+
+	// nastavení handleru pro syscall interrupt
 	kiv_hal::Set_Interrupt_Handler(kiv_os::System_Int_Number, Sys_Call);
 
 	//v ramci ukazky jeste vypiseme dostupne disky
@@ -44,6 +49,9 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &context) {
 		kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, regs);
 			
 		if (!regs.flags.carry) {
+
+			// takhle nìjak vypadá exekuce pøíkazù
+			// nastavím data v registrech a pøedám to knihovní funkci
 			auto print_str = [](const char* str) {
 				kiv_hal::TRegisters regs;
 				regs.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File);
@@ -73,6 +81,16 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &context) {
 		//spravne se ma shell spustit pres clone!
 		//ale ten v kostre pochopitelne neni implementovan		
 		shell(regs);
+	}
+	else {
+		auto print_str = [](const char* str) {
+			kiv_hal::TRegisters regs;
+			regs.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File);
+			regs.rdi.r = reinterpret_cast<decltype(regs.rdi.r)>(str);
+			regs.rcx.r = strlen(str);
+			Handle_IO(regs);
+		};
+		print_str("Shell nenalezen.");
 	}
 
 
