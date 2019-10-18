@@ -8,7 +8,7 @@
 namespace kiv_hal {
 
 	/*
-		General registery: r,e or x s nižší a vyšší polovinou. 
+		General registery: r,e,x or h+l
 	*/
 	struct TGeneral_Register {
 		union {
