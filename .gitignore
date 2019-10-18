@@ -1,3 +1,12 @@
-msvc/boot/.vs
-msvc/kernel/.vs
-msvc/user/.vs
+compiled/*.exe
+compiled/*.pdb
+compiled/*.ilk
+compiled/*.txt
+compiled/*.dll
+compiled/*.exp
+compiled/*.lib
+msvc/**/x64
+msvc/**/.vs
+msvc/**.vcxproj*
+msvc/**.sln
+*.zip
