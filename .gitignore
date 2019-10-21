@@ -8,5 +8,6 @@ compiled/*.lib
 msvc/**/x64
 msvc/**/.vs
 msvc/**.vcxproj*
+msvc/**/.vcxproj*
 msvc/**.sln
 *.zip

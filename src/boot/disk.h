@@ -29,7 +29,26 @@ protected:
 public:
 	CDisk_Image(const TCMOS_Drive_Parameters &cmos_parameters);
 	
+	/**
+	 * Precte sektory z disku.
+	 *
+	 * context.rdi.r by mìl obsahovat pointer na kiv_hal::TDisk_Address_Packet
+	 * Vysledek operace uložen fo context.flags.carry
+	 *    - kiv_hal::NDisk_Status::No_Error: Pokud je vse ok.
+	 *    - kiv_hal::NDisk_Status::Sector_Not_Found: Pokud nebyl pozadovany sektor nalezen (napr. presazena velikost disku).
+	 *    - kiv_hal::NDisk_Status::Address_Mark_Not_Found_Or_Bad_Sector: Pokud selhalho cteni.
+	 */
 	virtual void Read_Sectors(kiv_hal::TRegisters &context )final;
+
+	/**
+	 * Zapise sektory na disk.
+	 *
+	 * context.rdi.r by mìl obsahovat pointer na kiv_hal::TDisk_Address_Packet
+	 * Vysledek operace uložen fo context.flags.carry
+	 *    - kiv_hal::NDisk_Status::No_Error: Pokud je vse ok
+	 *    - kiv_hal::NDisk_Status::Sector_Not_Found: Pokud nebyl pozadovany sektor nalezen (napr. presazena velikost disku).
+	 *    - kiv_hal::NDisk_Status::Fixed_Disk_Write_Fault_On_Selected_Drive: Pokud zapis selahl.
+	 */
 	virtual void Write_Sectors(kiv_hal::TRegisters &context) final;
 };
 
