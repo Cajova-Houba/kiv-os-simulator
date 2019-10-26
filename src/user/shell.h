@@ -2,11 +2,11 @@
 
 #include "..\api\api.h"
 
-// "C" znamená, e hlavièka je C kompatibilní, tj. e kód psanı v C
-// mùe tuhle funkci volat
+// "C" znamenÃ¡, Å¾e hlaviÄka je C kompatibilnÃ­, tj. Å¾e kÃ³d psanÃ½ v C
+// mÅ¯Å¾e tuhle funkci volat
 /*
-	V regs.rax.x oèekáván handle na std_in.
-	V regs.rbx.x oèekáván handle na std_out.
+	V regs.rax.x oÄekÃ¡vÃ¡n handle na std_in.
+	V regs.rbx.x oÄekÃ¡vÃ¡n handle na std_out.
 */
 extern "C" size_t __stdcall shell(const kiv_hal::TRegisters &regs);
 

@@ -32,8 +32,8 @@ public:
 	/**
 	 * Precte sektory z disku.
 	 *
-	 * context.rdi.r by mìl obsahovat pointer na kiv_hal::TDisk_Address_Packet
-	 * Vysledek operace uložen fo context.flags.carry
+	 * context.rdi.r by mÄ›l obsahovat pointer na kiv_hal::TDisk_Address_Packet
+	 * Vysledek operace uloÅ¾en fo context.flags.carry
 	 *    - kiv_hal::NDisk_Status::No_Error: Pokud je vse ok.
 	 *    - kiv_hal::NDisk_Status::Sector_Not_Found: Pokud nebyl pozadovany sektor nalezen (napr. presazena velikost disku).
 	 *    - kiv_hal::NDisk_Status::Address_Mark_Not_Found_Or_Bad_Sector: Pokud selhalho cteni.
@@ -43,8 +43,8 @@ public:
 	/**
 	 * Zapise sektory na disk.
 	 *
-	 * context.rdi.r by mìl obsahovat pointer na kiv_hal::TDisk_Address_Packet
-	 * Vysledek operace uložen fo context.flags.carry
+	 * context.rdi.r by mÄ›l obsahovat pointer na kiv_hal::TDisk_Address_Packet
+	 * Vysledek operace uloÅ¾en fo context.flags.carry
 	 *    - kiv_hal::NDisk_Status::No_Error: Pokud je vse ok
 	 *    - kiv_hal::NDisk_Status::Sector_Not_Found: Pokud nebyl pozadovany sektor nalezen (napr. presazena velikost disku).
 	 *    - kiv_hal::NDisk_Status::Fixed_Disk_Write_Fault_On_Selected_Drive: Pokud zapis selahl.
@@ -62,8 +62,8 @@ public:
 	/**
 	 * Precte sektory z disku.
 	 *
-	 * context.rdi.r by mìl obsahovat pointer na kiv_hal::TDisk_Address_Packet
-	 * Vysledek operace uložen fo context.flags.carry
+	 * context.rdi.r by mÄ›l obsahovat pointer na kiv_hal::TDisk_Address_Packet
+	 * Vysledek operace uloÅ¾en fo context.flags.carry
 	 *    - kiv_hal::NDisk_Status::No_Error: Pokud je vse ok.
 	 *    - kiv_hal::NDisk_Status::Sector_Not_Found: Pokud nebyl pozadovany sektor nalezen (napr. presazena velikost disku).
 	 */
@@ -72,8 +72,8 @@ public:
 	/**
 	 * Zapise sektory na disk.
 	 *
-	 * context.rdi.r by mìl obsahovat pointer na kiv_hal::TDisk_Address_Packet
-	 * Vysledek operace uložen fo context.flags.carry
+	 * context.rdi.r by mÄ›l obsahovat pointer na kiv_hal::TDisk_Address_Packet
+	 * Vysledek operace uloÅ¾en fo context.flags.carry
 	 *    - kiv_hal::NDisk_Status::No_Error: Pokud je vse ok
 	 *    - kiv_hal::NDisk_Status::Sector_Not_Found: Pokud nebyl pozadovany sektor nalezen (napr. presazena velikost disku).
 	 */

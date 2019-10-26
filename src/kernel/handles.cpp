@@ -5,18 +5,18 @@
 #include <random>
 
 /*
-	Interní úloištì handlerù.
+	InternÃ­ ÃºloÅ¾iÅ¡tÄ› handlerÅ¯.
  */
 std::map<kiv_os::THandle, HANDLE> Handles;
 
 /*
-	Mutex pouitı pøi pøístupu k úloišti handlù.
+	Mutex pouÅ¾itÃ½ pÅ™i pÅ™Ã­stupu k ÃºloÅ¾iÅ¡ti handlÅ¯.
  */
 std::mutex Handles_Guard;
 kiv_os::THandle Last_Handle = 0;
 
 /*
-	Generátor pseudonáhodnıch èísel v rozsahu <1,6>.
+	GenerÃ¡tor pseudonÃ¡hodnÃ½ch ÄÃ­sel v rozsahu <1,6>.
 */
 std::random_device rd;
 std::mt19937 gen(rd());

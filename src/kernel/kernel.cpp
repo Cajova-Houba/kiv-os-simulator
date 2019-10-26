@@ -18,8 +18,8 @@ void Shutdown_Kernel() {
 }
 
 /*
-	Implementace systémováho volání.
-	regs: registr rax.h by mìl obsahovat èíslo OS sluby která se má volat (syscall kterı je potøeba vykonat).
+	Implementace systÃ©movÃ¡ho volÃ¡nÃ­.
+	regs: registr rax.h by mÄ›l obsahovat ÄÃ­slo OS sluÅ¾by kterÃ¡ se mÃ¡ volat (syscall kterÃ½ je potÅ™eba vykonat).
 */
 void __stdcall Sys_Call(kiv_hal::TRegisters &regs) {
 
@@ -34,10 +34,10 @@ void __stdcall Sys_Call(kiv_hal::TRegisters &regs) {
 }
 
 void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &context) {
-	// inicializace krenelu (naètení shellu)
+	// inicializace krenelu (naÄtenÃ­ shellu)
 	Initialize_Kernel();
 
-	// nastavení handleru pro syscall interrupt
+	// nastavenÃ­ handleru pro syscall interrupt
 	kiv_hal::Set_Interrupt_Handler(kiv_os::System_Int_Number, Sys_Call);
 
 	//v ramci ukazky jeste vypiseme dostupne disky
@@ -50,8 +50,8 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &context) {
 			
 		if (!regs.flags.carry) {
 
-			// takhle nìjak vypadá exekuce pøíkazù
-			// nastavím data v registrech a pøedám to knihovní funkci
+			// takhle nÄ›jak vypadÃ¡ exekuce pÅ™Ã­kazÅ¯
+			// nastavÃ­m data v registrech a pÅ™edÃ¡m to knihovnÃ­ funkci
 			auto print_str = [](const char* str) {
 				kiv_hal::TRegisters regs;
 				regs.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File);

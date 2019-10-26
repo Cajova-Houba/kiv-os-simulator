@@ -19,7 +19,7 @@ namespace kiv_os {
 							   //namisto integerovych handlu jako v realnem OS
 
 	/*
-		Konstanta pro neplatnı handle.
+		Konstanta pro neplatnÃ½ handle.
 	*/
 	constexpr THandle Invalid_Handle = static_cast<kiv_os::THandle>(-1);
 
@@ -166,7 +166,7 @@ namespace kiv_os {
 	//rezim otevreni noveho souboru
 	enum class NOpen_File : std::uint8_t {
 		fmOpen_Always = 1	//pokud je nastavena, pak soubor musi existovat, aby byl otevren
-								//není-li fmOpen_Always nastaveno, pak je soubor vdy vytvoøen - tj. i pøepsán starı soubor
+								//nenÃ­-li fmOpen_Always nastaveno, pak je soubor vÅ¾dy vytvoÅ™en - tj. i pÅ™epsÃ¡n starÃ½ soubor
 	};
 
 

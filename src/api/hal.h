@@ -42,7 +42,7 @@ namespace kiv_hal {
 	struct TRegisters;
 
 	/*
-		Prototyp funkce, která realizuje syscall. Tzn pointer (myslím?) na tuhle fci bude umístìn v IDT.
+		Prototyp funkce, kterÃ¡ realizuje syscall. Tzn pointer (myslÃ­m?) na tuhle fci bude umÃ­stÄ›n v IDT.
 	*/
 	using TInterrupt_Handler = void(__stdcall *)(TRegisters &context);			//prototyp funkce, ktera realizuje syscall
 	using TInterrupt_Descriptor_Table = TInterrupt_Handler*;					//ziskani ukazatele na tabulku se deje v dllmain.cpp, ktery nemate povoleno menit
@@ -54,7 +54,7 @@ namespace kiv_hal {
 	const uint32_t Expected_Tls_IDT_Index = 1;					
 	
 	/*
-		Sada registrù, kontext programu.
+		Sada registrÅ¯, kontext programu.
 	*/
 	struct TRegisters {
 		TGeneral_Register rax, rbx, rcx, rdx;

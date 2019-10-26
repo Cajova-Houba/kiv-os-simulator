@@ -3,10 +3,10 @@
 
 /*
 	todo: co bude v jakych registrech
-	todo: kde uloit hodnotu pøepínaèe on/off
+	todo: kde uloÅ¾it hodnotu pÅ™epÃ­naÄe on/off
 
-	V regs.rax.r je oèekáván pointer na buffer s null-terminated textem k vypsání typovanı na char *.
-	V regs.rbx.x je oèekáván file_handle do ktereho se bude vypisovat text typovanı na kiv_os::THandle.
-	Vrací 0 pokud byl text vypsán.
+	V regs.rax.r je oÄekÃ¡vÃ¡n pointer na buffer s null-terminated textem k vypsÃ¡nÃ­ typovanÃ½ na char *.
+	V regs.rbx.x je oÄekÃ¡vÃ¡n file_handle do ktereho se bude vypisovat text typovanÃ½ na kiv_os::THandle.
+	VracÃ­ 0 pokud byl text vypsÃ¡n.
 */
 extern "C" size_t __stdcall echo(const kiv_hal::TRegisters &regs);

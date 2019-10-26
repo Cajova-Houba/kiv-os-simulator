@@ -15,6 +15,6 @@ kiv_os::THandle Convert_Native_Handle(const HANDLE hnd);
 HANDLE Resolve_kiv_os_Handle(const kiv_os::THandle hnd);
 
 /*
-	Odstrani KIV/OS handle z interního storage.
+	Odstrani KIV/OS handle z internÃ­ho storage.
  */
 bool Remove_Handle(const kiv_os::THandle hnd);
