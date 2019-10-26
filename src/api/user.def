@@ -7,9 +7,9 @@ EXPORTS
 	rd
 	dir
 	echo
-;	find
+	find
 	sort
 	rgen
 	freq
-;	tasklist
+	tasklist
 	shutdown
