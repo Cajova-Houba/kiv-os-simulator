@@ -1,108 +1,99 @@
-#pragma once
+#include <windows.h>
 
 #include "kernel.h"
 #include "io.h"
-#include <Windows.h>
+#include "util.h"
 
-HMODULE User_Programs;
-
-
-void Initialize_Kernel() {
-	// nacteni uzivatelskeho shellu
-	User_Programs = LoadLibraryW(L"user.dll");
+static void PrintMsg(const char *msg, size_t length)
+{
+	// TODO
+	kiv_hal::TRegisters registers;
+	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File);
+	registers.rdi.r = reinterpret_cast<uint64_t>(msg);
+	registers.rcx.r = length;
+	Handle_IO(registers);
 }
 
-void Shutdown_Kernel() {
-	// uvolneni shellu
-	FreeLibrary(User_Programs);
+static void PrintMsg(const char *msg)
+{
+	PrintMsg(msg, strlen(msg));
 }
 
-/*
-	Implementace systémováho volání.
-	regs: registr rax.h by měl obsahovat číslo OS služby která se má volat (syscall který je potřeba vykonat).
-*/
-void __stdcall Sys_Call(kiv_hal::TRegisters &regs) {
+static void PrintMsg(const std::string & msg)
+{
+	PrintMsg(msg.c_str(), msg.length());
+}
 
-	switch (static_cast<kiv_os::NOS_Service_Major>(regs.rax.h)) {
-	
-		case kiv_os::NOS_Service_Major::File_System:		
-			Handle_IO(regs);
+/**
+ * @brief Vstupní bod systémového volání.
+ * @param context Registr rax.h by měl obsahovat hlavní číslo OS služby, která se má volat (syscall který se má vykonat).
+ */
+static void __stdcall SysCallEntry(kiv_hal::TRegisters & context)
+{
+	switch (static_cast<kiv_os::NOS_Service_Major>(context.rax.h))
+	{
+		case kiv_os::NOS_Service_Major::File_System:
+		{
+			Handle_IO(context);
 			break;
-
+		}
+		case kiv_os::NOS_Service_Major::Process:
+		{
+			// TODO
+			break;
+		}
 	}
-
 }
 
-void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &context) {
-	// inicializace krenelu (načtení shellu)
-	Initialize_Kernel();
-
+void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
+{
 	// nastavení handleru pro syscall interrupt
-	kiv_hal::Set_Interrupt_Handler(kiv_os::System_Int_Number, Sys_Call);
+	kiv_hal::Set_Interrupt_Handler(kiv_os::System_Int_Number, SysCallEntry);
 
-	//v ramci ukazky jeste vypiseme dostupne disky
-	kiv_hal::TRegisters regs;
-	for (regs.rdx.l = 0; ; regs.rdx.l++) {
-		kiv_hal::TDrive_Parameters params;		
-		regs.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Drive_Parameters);;
-		regs.rdi.r = reinterpret_cast<decltype(regs.rdi.r)>(&params);
-		kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, regs);
-			
-		if (!regs.flags.carry) {
+	// v rámci ukázky ještě vypíšeme dostupné disky
+	for (int i = 0; i < 256; i++)
+	{
+		kiv_hal::TDrive_Parameters params;
 
-			// takhle nějak vypadá exekuce příkazů
-			// nastavím data v registrech a předám to knihovní funkci
-			auto print_str = [](const char* str) {
-				kiv_hal::TRegisters regs;
-				regs.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File);
-				regs.rdi.r = reinterpret_cast<decltype(regs.rdi.r)>(str);
-				regs.rcx.r = strlen(str);
-				Handle_IO(regs);
-			};
+		kiv_hal::TRegisters registers;
+		registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Drive_Parameters);
+		registers.rdi.r = reinterpret_cast<uint64_t>(&params);
+		registers.rdx.l = i;
+		kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, registers);
 
-			const char dec_2_hex[16] = { L'0', L'1', L'2', L'3', L'4', L'5', L'6', L'7', L'8', L'9', L'A', L'B', L'C', L'D', L'E', L'F' };
-			char hexa[3];
-			hexa[0] = dec_2_hex[regs.rdx.l >> 4];
-			hexa[1] = dec_2_hex[regs.rdx.l & 0xf];
-			hexa[2] = 0;
-
-			print_str("Nalezen disk: 0x");
-			print_str(hexa);
-			print_str("\n");
-
+		if (registers.flags.carry)
+		{
+			continue;
 		}
 
-		if (regs.rdx.l == 255) break;
+		const uint64_t diskSize = params.absolute_number_of_sectors * params.bytes_per_sector;
+
+		PrintMsg("Nalezen disk ");
+		PrintMsg(Util::NumberToHexString(registers.rdx.l));
+		PrintMsg(" o velikosti ");
+		PrintMsg(Util::NumberToString(diskSize));
+		PrintMsg(" B\n");
 	}
 
-	//spustime shell - v realnem OS bychom ovsem spousteli login
-	kiv_os::TThread_Proc shell = (kiv_os::TThread_Proc)GetProcAddress(User_Programs, "shell");
-	if (shell) {
-		//spravne se ma shell spustit pres clone!
-		//ale ten v kostre pochopitelne neni implementovan		
-		shell(regs);
-	}
-	else {
-		auto print_str = [](const char* str) {
-			kiv_hal::TRegisters regs;
-			regs.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File);
-			regs.rdi.r = reinterpret_cast<decltype(regs.rdi.r)>(str);
-			regs.rcx.r = strlen(str);
-			Handle_IO(regs);
-		};
-		print_str("Shell nenalezen.");
+	HMODULE userDLL = LoadLibraryA("user.dll");
+	if (!userDLL)
+	{
+		PrintMsg("Nelze nacist user.dll!\n");
+		return;
 	}
 
-
-	Shutdown_Kernel();
-}
-
-
-void Set_Error(const bool failed, kiv_hal::TRegisters &regs) {
-	if (failed) {
-		regs.flags.carry = true;
-		regs.rax.r = GetLastError();
+	// spustíme shell - v reálném OS bychom ovšem spouštěli init
+	kiv_os::TThread_Proc shell = (kiv_os::TThread_Proc) GetProcAddress(userDLL, "shell");
+	if (shell)
+	{
+		// správně se má shell spustit přes clone!
+		// ale ten v kostře pochopitelně není implementován
+		shell(context);
 	}
 	else
-		regs.flags.carry = false;
+	{
+		PrintMsg("Shell nenalezen.\n");
+	}
+
+	FreeLibrary(userDLL);
 }

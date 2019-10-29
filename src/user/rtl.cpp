@@ -1,33 +1,112 @@
 #include "rtl.h"
 
-std::atomic<kiv_os::NOS_Error> kiv_os_rtl::Last_Error;
+static thread_local ThreadEnvironment g_threadEnv;
 
-kiv_hal::TRegisters Prepare_SysCall_Context(kiv_os::NOS_Service_Major major, uint8_t minor) {
-	kiv_hal::TRegisters regs;
-	regs.rax.h = static_cast<uint8_t>(major);
-	regs.rax.l = minor;
-	return regs;
+
+static bool SysCall(kiv_hal::TRegisters & context)
+{
+	kiv_os::Sys_Call(context);
+
+	if (context.flags.carry)
+	{
+		RTL::SetLastError(static_cast<kiv_os::NOS_Error>(context.rax.r));
+		return false;
+	}
+
+	RTL::SetLastError(kiv_os::NOS_Error::Success);
+
+	return true;
 }
 
 
-bool kiv_os_rtl::Read_File(const kiv_os::THandle file_handle, char* const buffer, const size_t buffer_size, size_t &read) {
-	kiv_hal::TRegisters regs =  Prepare_SysCall_Context(kiv_os::NOS_Service_Major::File_System, static_cast<uint8_t>(kiv_os::NOS_File_System::Read_File));
-	regs.rdx.x = static_cast<decltype(regs.rdx.x)>(file_handle);
-	regs.rdi.r = reinterpret_cast<decltype(regs.rdi.r)>(buffer);
-	regs.rcx.r = buffer_size;	
+// ========================
+// ==  Procesy a vlákna  ==
+// ========================
 
-	const bool result = kiv_os::Sys_Call(regs);
-	read = regs.rax.r;
-	return result;
+const char *RTL::GetProcessCmdLine()
+{
+	return g_threadEnv.processCmdLine;
 }
 
-bool kiv_os_rtl::Write_File(const kiv_os::THandle file_handle, const char *buffer, const size_t buffer_size, size_t &written) {
-	kiv_hal::TRegisters regs = Prepare_SysCall_Context(kiv_os::NOS_Service_Major::File_System, static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File));
-	regs.rdx.x = static_cast<decltype(regs.rdx.x)>(file_handle);
-	regs.rdi.r = reinterpret_cast<decltype(regs.rdi.r)>(buffer);
-	regs.rcx.r = buffer_size;
-
-	const bool result = kiv_os::Sys_Call(regs);
-	written = regs.rax.r;
-	return result;
+kiv_os::THandle RTL::GetStdInHandle()
+{
+	return g_threadEnv.stdIn;
 }
+
+kiv_os::THandle RTL::GetStdOutHandle()
+{
+	return g_threadEnv.stdOut;
+}
+
+ThreadEnvironment *RTL::GetCurrentThreadEnv()
+{
+	return &g_threadEnv;
+}
+
+
+// ====================
+// ==  Chybové kódy  ==
+// ====================
+
+kiv_os::NOS_Error RTL::GetLastError()
+{
+	return g_threadEnv.lastError;
+}
+
+void RTL::SetLastError(kiv_os::NOS_Error error)
+{
+	g_threadEnv.lastError = error;
+}
+
+
+// =========================================
+// ==  Soubory a standardní vstup/výstup  ==
+// =========================================
+
+bool RTL::ReadFile(kiv_os::THandle file, char *buffer, size_t size, size_t *pRead)
+{
+	kiv_hal::TRegisters registers;
+	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
+	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Read_File);
+	registers.rdx.x = file;
+	registers.rdi.r = reinterpret_cast<uint64_t>(buffer);
+	registers.rcx.r = size;
+
+	if (!SysCall(registers))
+	{
+		return false;
+	}
+
+	if (pRead)
+	{
+		(*pRead) = registers.rax.r;
+	}
+
+	return true;
+}
+
+bool RTL::WriteFile(kiv_os::THandle file, const char *buffer, size_t size, size_t *pWritten)
+{
+	kiv_hal::TRegisters registers;
+	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
+	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Write_File);
+	registers.rdx.x = file;
+	registers.rdi.r = reinterpret_cast<uint64_t>(buffer);
+	registers.rcx.r = size;
+
+	if (!SysCall(registers))
+	{
+		return false;
+	}
+
+	if (pWritten)
+	{
+		(*pWritten) = registers.rax.r;
+	}
+
+	return true;
+}
+
+
+
+kiv_os::NOS_Error kiv_os_rtl::Last_Error;  // NEPOUŽÍVAT

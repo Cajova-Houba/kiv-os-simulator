@@ -1,48 +1,76 @@
+#include <string>
+#include <windows.h>
+
 #include "vga.h"
 
-#include <Windows.h>
+static bool g_isStdOutConsole = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_CHAR;
 
-HANDLE hConsoleOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+static void WriteString(const char *string, size_t length)
+{
+	std::string buffer;
+	buffer.reserve(length);
 
-
-void Write_Control_Char(const char ch) {
-	//Narozdil od Write_String tady pouzijeme WriteConsole, protoze WriteConsole se pri zapisu nepresmeruje do souboru jako WriteFile.
-	//Coz je chovani, ktere u zapisu kontrolniho znaku chceme.
-
-	DWORD read;
-	switch (static_cast<kiv_hal::NControl_Codes>(ch)) {
-		case kiv_hal::NControl_Codes::BS:
+	for (size_t i = 0; i < length; i++)
+	{
+		const char ch = string[i];
+		switch (ch)
+		{
+			case '\b':  // backspace
+			{
+				if (g_isStdOutConsole)
 				{
-					char backspace_sequence[3] = { 8, ' ', 8 };	//posuneme kurzor o jednu pozici zpet, prepiseme zobrazeny znak, a opet posunme po zapisu kurzor o jednu pozici zpet
-					WriteConsoleA(hConsoleOutput, &backspace_sequence, sizeof(backspace_sequence), &read, NULL);
+					buffer += '\b';
+					buffer += ' ';
+					buffer += '\b';
+				}
+				else
+				{
+					buffer += '\b';
 				}
 				break;
-
-		default: 
-			//kod, ktery nezname proste zapiseme jak je
-			WriteConsoleA(hConsoleOutput, &ch, 1, &read, NULL);
-			break;
+			}
+			case '\n':  // newline
+			{
+				// CRLF
+				buffer += '\r';
+				buffer += '\n';
+				break;
+			}
+			default:
+			{
+				buffer += ch;
+				break;
+			}
+		}
 	}
+
+	HANDLE file = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	DWORD written;
+	WriteFile(file, buffer.c_str(), static_cast<DWORD>(buffer.length()), &written, NULL);
 }
 
-void Write_String(char *chars, const size_t count) {
-	DWORD read;
-
-	WriteFile(hConsoleOutput, chars, static_cast<DWORD>(count), &read, NULL);
-		//nelze pouzit WriteConsoleA, viz komentar u Write_Control_Char
-}
-
-
-void __stdcall VGA_Handler(kiv_hal::TRegisters &context) {
-	switch (static_cast<kiv_hal::NVGA_BIOS>(context.rax.h)) {
-		case kiv_hal::NVGA_BIOS::Write_Control_Char:		
-			Write_Control_Char(context.rdx.l);
+void __stdcall VGA::InterruptHandler(kiv_hal::TRegisters & context)
+{
+	switch (static_cast<kiv_hal::NVGA_BIOS>(context.rax.h))
+	{
+		case kiv_hal::NVGA_BIOS::Write_Control_Char:
+		{
+			const char ch = context.rdx.l;
+			WriteString(&ch, 1);
 			break;
-											
-		case kiv_hal::NVGA_BIOS::Write_String:	
-			Write_String(reinterpret_cast<char*>(context.rdx.r), static_cast<size_t>(context.rcx.r));
+		}
+		case kiv_hal::NVGA_BIOS::Write_String:
+		{
+			const char *string = reinterpret_cast<const char*>(context.rdx.r);
+			const size_t length = context.rcx.r;
+			WriteString(string, length);
 			break;
-
-		default: context.flags.carry = 1;
+		}
+		default:
+		{
+			context.flags.carry = 1;
+			break;
+		}
 	}
 }

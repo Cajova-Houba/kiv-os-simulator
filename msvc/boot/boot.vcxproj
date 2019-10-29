@@ -159,6 +159,7 @@
     <ClCompile Include="..\..\src\boot\idt.cpp" />
     <ClCompile Include="..\..\src\boot\keyboard.cpp" />
     <ClCompile Include="..\..\src\boot\main.cpp" />
+    <ClCompile Include="..\..\src\boot\util.cpp" />
     <ClCompile Include="..\..\src\boot\vga.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -169,6 +170,7 @@
     <ClInclude Include="..\..\src\boot\idt.h" />
     <ClInclude Include="..\..\src\boot\keyboard.h" />
     <ClInclude Include="..\..\src\boot\SimpleIni.h" />
+    <ClInclude Include="..\..\src\boot\util.h" />
     <ClInclude Include="..\..\src\boot\vga.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

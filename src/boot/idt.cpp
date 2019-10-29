@@ -1,27 +1,30 @@
+#include <windows.h>
+
 #include "../api/hal.h"
+
+#include "idt.h"
 #include "keyboard.h"
 #include "vga.h"
 #include "disk.h"
 
-#include <memory>
-#include <Windows.h>
+extern kiv_hal::TInterrupt_Handler *interrupt_descriptor_table;  // api.cpp
 
-extern kiv_hal::TInterrupt_Handler* interrupt_descriptor_table;
+kiv_hal::TInterrupt_Handler g_IDT_storage[256];
 
-kiv_hal::TInterrupt_Handler interrupt_descriptor_table_storage[256];
+bool IDT::Init()
+{
+	memset(g_IDT_storage, 0, sizeof g_IDT_storage);
+	interrupt_descriptor_table = g_IDT_storage;
 
-bool Init_IDT() {
-	// umistime tabulku deskriptoru preruseni na adresu 0
-	memset(interrupt_descriptor_table_storage, 0, sizeof(interrupt_descriptor_table_storage));
-	interrupt_descriptor_table = interrupt_descriptor_table_storage;
+	// nastavení přerušení pro VGA, Disk IO a klávesnici
+	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::VGA_BIOS, VGA::InterruptHandler);
+	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, Disk::InterruptHandler);
+	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::Keyboard, Keyboard::InterruptHandler);
 
-	// nastaveni prepruseni pro VGA, Disk IO a klavesnici
-	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::VGA_BIOS, VGA_Handler);
-	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, Disk_Handler);
-	kiv_hal::Set_Interrupt_Handler(kiv_hal::NInterrupt::Keyboard, Keyboard_Handler);
-
-	auto index = TlsAlloc();
-	if ((kiv_hal::Expected_Tls_IDT_Index != index) || !TlsSetValue(index, interrupt_descriptor_table)) {
+	// bez možnosti úpravy api.cpp se tohoto svinstva nelze zbavit :(
+	DWORD index = TlsAlloc();
+	if (kiv_hal::Expected_Tls_IDT_Index != index || !TlsSetValue(index, interrupt_descriptor_table))
+	{
 		TlsFree(index);
 		return false;
 	}

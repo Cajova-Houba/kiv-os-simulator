@@ -21,13 +21,21 @@
   <ItemGroup>
     <ClInclude Include="..\..\src\api\api.h" />
     <ClInclude Include="..\..\src\api\hal.h" />
-    <ClInclude Include="..\..\src\user\echo.h" />
     <ClInclude Include="..\..\src\user\rtl.h" />
-    <ClInclude Include="..\..\src\user\shell.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\api\api.cpp" />
-    <ClCompile Include="..\..\src\user\echo.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_dir.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_echo.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_find.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_freq.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_md.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_rd.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_rgen.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_shutdown.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_sort.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_tasklist.cpp" />
+    <ClCompile Include="..\..\src\user\cmd_type.cpp" />
     <ClCompile Include="..\..\src\user\rtl.cpp" />
     <ClCompile Include="..\..\src\user\shell.cpp" />
   </ItemGroup>

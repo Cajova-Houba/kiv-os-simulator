@@ -1,4 +1,6 @@
 #pragma once
 
-
-bool Init_IDT();
+namespace IDT
+{
+	bool Init();
+}

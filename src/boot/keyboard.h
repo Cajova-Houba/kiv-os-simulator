@@ -2,9 +2,9 @@
 
 #include "../api/hal.h"
 
-bool Init_Keyboard();
+namespace Keyboard
+{
+	bool Init();
 
-/*
-	Obsluha preruseni klavesnice.
-*/
-void __stdcall Keyboard_Handler(kiv_hal::TRegisters &context);
+	void __stdcall InterruptHandler(kiv_hal::TRegisters & context);
+}

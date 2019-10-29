@@ -1,147 +1,282 @@
-//Tento kod nebyl odladen. Mozna, ze tu budou chyby k odhaleni... a mozna i tak k ziskani nejakeho toho bonusoveho bodu.
+#include <cstring>
+#include <array>
+#include <memory>
+#include <vector>
+#include <fstream>
 
 #include "disk.h"
+#include "cmos.h"
 
-#include <array>
+class IDiskDrive
+{
+protected:
+	size_t m_bytesPerSector;
+	size_t m_diskSize;
 
-std::array<std::unique_ptr<CDisk_Drive>, 256> disk_drives;
-
-#undef max
-
-void __stdcall Disk_Handler(kiv_hal::TRegisters &context) {
-	if (!disk_drives[context.rdx.l]) {
-		auto cmos_params = cmos.Drive_Parameters(context.rdx.l);
-		if (cmos_params.is_present) {
-			if (cmos_params.is_ram_disk) disk_drives[context.rdx.l].reset(new CRAM_Disk{ cmos_params });
-				else disk_drives[context.rdx.l].reset(new CDisk_Image{ cmos_params });
+	void setStatus(kiv_hal::TRegisters & context, const kiv_hal::NDisk_Status status)
+	{
+		if (status == kiv_hal::NDisk_Status::No_Error)
+		{
+			context.flags.carry = 0;
 		}
-		else {
+		else
+		{
 			context.flags.carry = 1;
-			context.rax.x = static_cast<uint16_t>(kiv_hal::NDisk_Status::Drive_Not_Ready);
+			context.rax.x = static_cast<uint16_t>(status);
 		}
 	}
 
-	switch (static_cast<kiv_hal::NDisk_IO>(context.rax.h)) {		
-		case kiv_hal::NDisk_IO::Read_Sectors:		return disk_drives[context.rdx.l]->Read_Sectors(context);
-		case kiv_hal::NDisk_IO::Write_Sectors:		return disk_drives[context.rdx.l]->Write_Sectors(context);
-		case kiv_hal::NDisk_IO::Drive_Parameters:	return disk_drives[context.rdx.l]->Drive_Parameters(context);
+	// vrátí true, pokud by čtení/zápis nezpůsobilo přístup za velikost disku
+	// v takovém případě vrací false a nastaví chybu
+	bool checkDAP(kiv_hal::TRegisters & context)
+	{
+		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		default: context.flags.carry = 1;
-				 context.rax.x = static_cast<uint16_t>(kiv_hal::NDisk_Status::Bad_Command);
+		if (m_bytesPerSector * (pDAP->lba_index + pDAP->count) >= m_diskSize)
+		{
+			// nemůžeme dovolit, výsledkem by byl přístup za velikost disku
+			setStatus(context, kiv_hal::NDisk_Status::Sector_Not_Found);
+			return false;
+		}
+
+		return true;
 	}
-}
 
-CDisk_Drive::CDisk_Drive(const TCMOS_Drive_Parameters &cmos_parameters) : mBytes_Per_Sector(cmos_parameters.bytes_per_sector), mDisk_Size(0) {
+public:
+	IDiskDrive(const CMOS::DriveParameters & params)
+	: m_bytesPerSector(params.bytesPerSector),
+	  m_diskSize(0)
+	{
+	}
 
-}
+	void getDriveParameters(kiv_hal::TRegisters & context)
+	{
+		const size_t MB = 1024 * 1024;  // 1 MiB
 
-void CDisk_Drive::Set_Status(kiv_hal::TRegisters &context, const kiv_hal::NDisk_Status status) {
-	context.flags.carry = status == kiv_hal::NDisk_Status::No_Error ? 0 : 1;
-	if (context.flags.carry) context.rax.x = static_cast<uint16_t>(status);
-}
+		kiv_hal::TDrive_Parameters *pParams = reinterpret_cast<kiv_hal::TDrive_Parameters*>(context.rdi.r);
+		bool isAssistedTranslation = true;
 
-void CDisk_Drive::Drive_Parameters(kiv_hal::TRegisters &context) {
-	kiv_hal::TDrive_Parameters &params = *reinterpret_cast<kiv_hal::TDrive_Parameters*>(context.rdi.r);
+		if (m_diskSize < 504 * MB)
+		{
+			pParams->heads = 16;
+		}
+		else if (m_diskSize < 1008 * MB)
+		{
+			pParams->heads = 32;
+		}
+		else if (m_diskSize < 2016 * MB)
+		{
+			pParams->heads = 64;
+		}
+		else if (m_diskSize < 4032 * MB)
+		{
+			pParams->heads = 128;
+		}
+		else if (m_diskSize < 8032 * MB)
+		{
+			pParams->heads = 255;
+		}
+		else
+		{
+			// pro tahle čísla nemáme standardní přepočet, takže nastavíme vše na max
+			pParams->sectors_per_track = 0xFFFFFFFF;
+			pParams->heads             = 0xFFFFFFFF;
+			pParams->cylinders         = 0xFFFFFFFF;
 
-	const size_t MB = 1024 * 1024; //1MiB
-	bool assisted_translation = true;
+			isAssistedTranslation = false;
+		}
+
+		if (isAssistedTranslation)
+		{
+			pParams->sectors_per_track = 63;
+			const size_t sum = pParams->sectors_per_track * pParams->heads * m_bytesPerSector;
+			pParams->cylinders = static_cast<uint32_t>(m_diskSize / sum);
+		}
+
+		pParams->bytes_per_sector = static_cast<uint16_t>(m_bytesPerSector);
+		pParams->absolute_number_of_sectors = m_diskSize / m_bytesPerSector;
+
+		setStatus(context, kiv_hal::NDisk_Status::No_Error);
+	}
+
+	virtual void readSectors(kiv_hal::TRegisters & context) = 0;
+	virtual void writeSectors(kiv_hal::TRegisters & context) = 0;
 	
-	if (mDisk_Size < 504 * MB) params.heads = 16;
-	 else  if (mDisk_Size < 1008 * MB) params.heads = 32;
-		else if (mDisk_Size < 2016 * MB) params.heads = 64;
-			else if (mDisk_Size < 4032 * MB) params.heads = 128;
-				else if (mDisk_Size < 8032 * MB) params.heads = 255;
-				else
-					//pro tyhle cisla nemame standardni prepocet, tak nastavime vse na max
-					{
-						params.sectors_per_track = std::numeric_limits<decltype(params.sectors_per_track)>::max();
-						params.heads = std::numeric_limits<decltype(params.heads)>::max();
-						params.cylinders = std::numeric_limits<decltype(params.cylinders)>::max();
-						assisted_translation = false;
-					};
+};
 
-	if (assisted_translation) {
-		params.sectors_per_track = 63;
-//		size_t tmp1 = static_cast<size_t>(params.sectors_per_track * params.heads);
-		//size_t tmp2 = tmp1 * mBytes_Per_Sector;
-		//tmp2 /= mDisk_Size;
-		params.cylinders = static_cast<decltype(params.cylinders) > (mDisk_Size / (static_cast<size_t>(params.sectors_per_track) * static_cast<size_t>(params.heads) * mBytes_Per_Sector));
-		//params.cylinders = static_cast<decltype(params.cylinders)>(tmp2);
+class CDiskImage : public IDiskDrive
+{
+protected:
+	std::fstream m_diskImage;
+
+public:
+	CDiskImage(const CMOS::DriveParameters & params)
+	: IDiskDrive(params)
+	{
+		auto open_mode = std::ios::binary | std::ios::in;
+		if (!params.isReadOnly)
+		{
+			open_mode |= std::ios::out;
+		}
+
+		m_diskImage.open(params.diskImage, open_mode);
+
+		m_diskImage.seekg(0, std::ios::end);
+		m_diskSize = m_diskImage.tellg();
 	}
 
-	params.bytes_per_sector = static_cast<decltype(params.bytes_per_sector)>(mBytes_Per_Sector);
-	params.absolute_number_of_sectors = mDisk_Size / mBytes_Per_Sector;
-	Set_Status(context, kiv_hal::NDisk_Status::No_Error);
-}
+	void readSectors(kiv_hal::TRegisters & context) override
+	{
+		if (!checkDAP(context))
+		{
+			return;
+		}
 
+		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-bool CDisk_Drive::Check_DAP(kiv_hal::TRegisters &context) {
-	kiv_hal::TDisk_Address_Packet &dap = *reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
+		const size_t bytesToRead = pDAP->count * m_bytesPerSector;
 
-	if (mBytes_Per_Sector*(dap.lba_index + dap.count) >= mDisk_Size) {
-		//nemuzeme dovolit, vysledkem by byl pristup za velikost disku
-		Set_Status(context, kiv_hal::NDisk_Status::Sector_Not_Found);
-		return false;
+		m_diskImage.seekg(m_bytesPerSector * pDAP->lba_index, std::ios::beg);
+		m_diskImage.read(static_cast<char*>(pDAP->sectors), bytesToRead);
+
+		if (m_diskImage.gcount() == bytesToRead)
+		{
+			setStatus(context, kiv_hal::NDisk_Status::No_Error);
+		}
+		else
+		{
+			setStatus(context, kiv_hal::NDisk_Status::Address_Mark_Not_Found_Or_Bad_Sector);
+		}
 	}
 
-	return true;
-}
+	void writeSectors(kiv_hal::TRegisters & context) override
+	{
+		if (!checkDAP(context))
+		{
+			return;
+		}
 
-CDisk_Image::CDisk_Image(const TCMOS_Drive_Parameters &cmos_parameters) : CDisk_Drive(cmos_parameters) {
-	auto open_mode = std::ios::binary | std::ios::in;
-	if (!cmos_parameters.read_only) open_mode |= std::ios::out;
-	mDisk_Image.open(cmos_parameters.disk_image, open_mode);	
-	mDisk_Image.seekg(0, std::ios::end);      //rovnou nastavime pozici na konce souboru, protoze pri zapisu ji budeme stejne prestavovat
-	mDisk_Size = mDisk_Image.tellg();
-}
+		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
+		const size_t bytesToWrite = pDAP->count * m_bytesPerSector;
 
-void CDisk_Image::Read_Sectors(kiv_hal::TRegisters &context) {
-	if (Check_DAP(context)) {
-		kiv_hal::TDisk_Address_Packet &dap = *reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
-		mDisk_Image.seekg(mBytes_Per_Sector*dap.lba_index, std::ios::beg);
-		const auto bytes_to_read = dap.count*mBytes_Per_Sector;
-		mDisk_Image.read(static_cast<char*>(dap.sectors), bytes_to_read);
-		if (mDisk_Image.gcount() == bytes_to_read) Set_Status(context, kiv_hal::NDisk_Status::No_Error);
-			else Set_Status(context, kiv_hal::NDisk_Status::Address_Mark_Not_Found_Or_Bad_Sector);
+		m_diskImage.seekg(m_bytesPerSector * pDAP->lba_index, std::ios::beg);
+		const auto before = m_diskImage.tellp();
+		m_diskImage.write(static_cast<char*>(pDAP->sectors), bytesToWrite);
+		const auto bytesWritten = m_diskImage.tellp() - before;
+
+		if (bytesWritten == bytesToWrite)
+		{
+			setStatus(context, kiv_hal::NDisk_Status::No_Error);
+		}
+		else
+		{
+			setStatus(context, kiv_hal::NDisk_Status::Fixed_Disk_Write_Fault_On_Selected_Drive);
+		}
 	}
-}
+};
 
-void CDisk_Image::Write_Sectors(kiv_hal::TRegisters &context) {
-	if (Check_DAP(context)) {
-		kiv_hal::TDisk_Address_Packet &dap = *reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
-		mDisk_Image.seekg(mBytes_Per_Sector*dap.lba_index, std::ios::beg);
-		const auto bytes_to_write = dap.count*mBytes_Per_Sector;
+class CRAMDisk : public IDiskDrive
+{
+protected:
+	std::vector<char> m_buffer;
 
-		const auto before = mDisk_Image.tellp();
-		mDisk_Image.write(static_cast<char*>(dap.sectors), bytes_to_write);
-		const auto number_of_bytes_written = mDisk_Image.tellp() - before;
-
-		if (number_of_bytes_written == bytes_to_write) Set_Status(context, kiv_hal::NDisk_Status::No_Error);
-			else Set_Status(context, kiv_hal::NDisk_Status::Fixed_Disk_Write_Fault_On_Selected_Drive);
+public:
+	CRAMDisk(const CMOS::DriveParameters & params)
+	: IDiskDrive(params)
+	{
+		m_diskSize = params.RAMDiskSize;
+		m_buffer.resize(m_diskSize);
 	}
-}
 
-CRAM_Disk::CRAM_Disk(const TCMOS_Drive_Parameters &cmos_parameters) : CDisk_Drive(cmos_parameters) {
-	mDisk_Size = cmos_parameters.RAM_Disk_Size;
-	mDisk_Image.resize(mDisk_Size);
-}
+	void readSectors(kiv_hal::TRegisters & context) override
+	{
+		if (!checkDAP(context))
+		{
+			return;
+		}
 
+		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-void CRAM_Disk::Read_Sectors(kiv_hal::TRegisters &context) {
-	if (Check_DAP(context)) {
-		kiv_hal::TDisk_Address_Packet &dap = *reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
+		const size_t pos = pDAP->lba_index * m_bytesPerSector;
+		const size_t length = pDAP->count * m_bytesPerSector;
 
-		memcpy(dap.sectors, &mDisk_Image[dap.lba_index*mBytes_Per_Sector], mBytes_Per_Sector*dap.count);
-		Set_Status(context, kiv_hal::NDisk_Status::No_Error);
+		std::memcpy(pDAP->sectors, m_buffer.data() + pos, length);
+
+		setStatus(context, kiv_hal::NDisk_Status::No_Error);
 	}
-}
 
-void CRAM_Disk::Write_Sectors(kiv_hal::TRegisters &context) {
-	if (Check_DAP(context)) {
-		kiv_hal::TDisk_Address_Packet &dap = *reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
+	void writeSectors(kiv_hal::TRegisters & context) override
+	{
+		if (!checkDAP(context))
+		{
+			return;
+		}
 
-		memcpy(&mDisk_Image[dap.lba_index*mBytes_Per_Sector], dap.sectors, mBytes_Per_Sector*dap.count);
-		Set_Status(context, kiv_hal::NDisk_Status::No_Error);
+		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
+
+		const size_t pos = pDAP->lba_index * m_bytesPerSector;
+		const size_t length = pDAP->count * m_bytesPerSector;
+
+		std::memcpy(m_buffer.data() + pos, pDAP->sectors, length);
+
+		setStatus(context, kiv_hal::NDisk_Status::No_Error);
+	}
+};
+
+static std::array<std::unique_ptr<IDiskDrive>, 256> g_diskDrives;
+
+void __stdcall Disk::InterruptHandler(kiv_hal::TRegisters & context)
+{
+	const uint8_t diskIndex = context.rdx.l;
+
+	if (!g_diskDrives[diskIndex])
+	{
+		const CMOS::DriveParameters params = CMOS::GetDriveParameters(diskIndex);
+
+		if (params.isPresent)
+		{
+			if (params.isRAMDisk)
+			{
+				g_diskDrives[diskIndex] = std::make_unique<CRAMDisk>(params);
+			}
+			else
+			{
+				g_diskDrives[diskIndex] = std::make_unique<CDiskImage>(params);
+			}
+		}
+	}
+
+	if (g_diskDrives[diskIndex])
+	{
+		switch (static_cast<kiv_hal::NDisk_IO>(context.rax.h))
+		{
+			case kiv_hal::NDisk_IO::Read_Sectors:
+			{
+				g_diskDrives[diskIndex]->readSectors(context);
+				break;
+			}
+			case kiv_hal::NDisk_IO::Write_Sectors:
+			{
+				g_diskDrives[diskIndex]->writeSectors(context);
+				break;
+			}
+			case kiv_hal::NDisk_IO::Drive_Parameters:
+			{
+				g_diskDrives[diskIndex]->getDriveParameters(context);
+				break;
+			}
+			default:
+			{
+				context.flags.carry = 1;
+				context.rax.x = static_cast<uint16_t>(kiv_hal::NDisk_Status::Bad_Command);
+				break;
+			}
+		}
+	}
+	else
+	{
+		context.flags.carry = 1;
+		context.rax.x = static_cast<uint16_t>(kiv_hal::NDisk_Status::Drive_Not_Ready);
 	}
 }

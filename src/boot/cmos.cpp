@@ -1,58 +1,42 @@
 #include "cmos.h"
+#include "util.h"
+#include "SimpleIni.h"
 
-#include <fstream>
+#define CMOS_CONFIG_DRIVE_RAM_DISK      "RAM_Disk"
+#define CMOS_CONFIG_DRIVE_RAM_DISK_SIZE "RAM_Disk_Size"
+#define CMOS_CONFIG_DRIVE_READ_ONLY     "Ready_Only"
+#define CMOS_CONFIG_DRIVE_DISK_IMAGE    "Disk_Image"
 
-CCMOS cmos{};
+static CSimpleIniA g_config;
 
-extern "C" char __ImageBase;
+bool CMOS::Init()
+{
+	const std::string configFilePath = Util::GetApplicationDirectory() + CMOS_CONFIG_FILENAME;
 
+	if (g_config.LoadFile(configFilePath.c_str()) != SI_OK)
+	{
+		// nelze načíst soubor s konfigurací
+		return false;
+	}
 
-std::experimental::filesystem::path Get_Application_Dir() {
-	const size_t bufsize = 1024;
-	wchar_t ModuleFileName[bufsize];
-	
-
-	GetModuleFileNameW(((HINSTANCE)&__ImageBase), ModuleFileName, bufsize);
-
-	std::experimental::filesystem::path exePath{ ModuleFileName };
-	return exePath.parent_path();
+	return true;
 }
 
-CCMOS::CCMOS() noexcept {
-	auto file_path = Get_Application_Dir() / rsConfig_Name;
+CMOS::DriveParameters CMOS::GetDriveParameters(uint8_t driveIndex)
+{
+	const std::string section = std::string("Drive_") + Util::NumberToHexString(driveIndex);
 
-	std::vector<char> buf;
-	std::ifstream config_file;
-
-	try {
-		config_file.open(file_path);
-
-		if (config_file.is_open()) {
-			buf.assign(std::istreambuf_iterator<char>(config_file), std::istreambuf_iterator<char>());
-			mIni.LoadData(buf.data(), buf.size());
-		}	
-	}
-	catch (...) {
-	}
-}
-
-TCMOS_Drive_Parameters CCMOS::Drive_Parameters(uint8_t drive_index) {
-	const wchar_t dec_2_hex[16] = { L'0', L'1', L'2', L'3', L'4', L'5', L'6', L'7', L'8', L'9', L'A', L'B', L'C', L'D', L'E', L'F' };
-
-	std::wstring section_full_name{ isDrive_Prefix };
-	section_full_name += dec_2_hex[drive_index >> 4];
-	section_full_name += dec_2_hex[drive_index & 0xf];
-			
-
-	TCMOS_Drive_Parameters result;
+	DriveParameters result;
 	
-	result.is_present = mIni.GetSection(section_full_name.c_str());
+	if (g_config.GetSection(section.c_str()))
+	{
+		const long minRAMDiskSize = static_cast<long>(result.bytesPerSector);  // alespoň jeden sektor
 
-	if (result.is_present) {
-		result.is_ram_disk = mIni.GetBoolValue(section_full_name.c_str(), iiRAM_Disk);
-		result.read_only = mIni.GetBoolValue(section_full_name.c_str(), iiRead_Only);
-		result.disk_image = mIni.GetValue(section_full_name.c_str(), iiDisk_Image, L"");
-		result.RAM_Disk_Size = mIni.GetLongValue(section_full_name.c_str(), iiRAM_Disk_Size, result.bytes_per_sector);			//alespon jeden sektor
+		result.isPresent   = true;
+		result.isRAMDisk   = g_config.GetBoolValue(section.c_str(), CMOS_CONFIG_DRIVE_RAM_DISK);
+		result.isReadOnly  = g_config.GetBoolValue(section.c_str(), CMOS_CONFIG_DRIVE_READ_ONLY);
+		result.diskImage   = g_config.GetValue(    section.c_str(), CMOS_CONFIG_DRIVE_DISK_IMAGE, "");
+		result.RAMDiskSize = g_config.GetLongValue(section.c_str(), CMOS_CONFIG_DRIVE_RAM_DISK_SIZE, minRAMDiskSize);
 	}
 
 	return result;

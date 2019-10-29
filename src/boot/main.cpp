@@ -1,45 +1,64 @@
-#include <Windows.h>
 #include <iostream>
+#include <windows.h>
 
 #include "../api/hal.h"
+#include "cmos.h"
 #include "idt.h"
 #include "keyboard.h"
 
-bool Setup_HW() {
-	if (!Init_Keyboard()) {
-		std::wcout << L"Nepodarilo se vypnout konzolove echo, mohly by byt chyby na vystupu => koncime." << std::endl;
+static bool Setup_HW()
+{
+	// příkazová řádka ve Windows je velmi velmi pochybná, takže zde raději nebudeme vypisovat chybové hlášky s diakritikou
+
+	if (!CMOS::Init())
+	{
+		std::cout << "Nepodarilo se nacist konfiguracni soubor " CMOS_CONFIG_FILENAME "!" << std::endl;
 		return false;
 	}
 
-
-	//pripraveme tabulku vektoru preruseni
-	if (!Init_IDT()) {
-		std::wcout << L"Nepodarilo se spravne inicializovat IDT!" << std::endl;
+	if (!Keyboard::Init())
+	{
+		std::cout << "Nepodarilo se inicializovat klavesnici!" << std::endl;
 		return false;
 	}
 
-	//disky tady inicializovat nebudeme, ty at si klidne selzou treba behem chodu systemu
+	// připravíme tabulku vektorů přerušení
+	if (!IDT::Init())
+	{
+		std::cout << "Nepodarilo se inicializovat IDT!" << std::endl;
+		return false;
+	}
+
+	// disky tady inicializovat nebudeme, ty ať si klidně selžou třeba během chodu systému
 
 	return true;
 }
 
-int __cdecl main() {
-	if (!Setup_HW()) return 1;
-
-	//HW je nastaven, zavedeme simulovany operacni system
-	HMODULE kernel = LoadLibraryW(L"kernel.dll");
-	if (!kernel) {
-		std::wcout << L"Nelze nacist kernel.dll!" << std::endl;
+int main()
+{
+	if (!Setup_HW())
+	{
 		return 1;
 	}
 
-	//v tuto chvili DLLMain v kernel.dll mela nahrat na NInterrupt::Bootstrap_Loader adresu pro inicializaci jadra
-	//takze ji spustime
-	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Bootstrap_Loader, kiv_hal::TRegisters{ 0 });	
+	// HW je nastaven, zavedeme simulovaný operační systém
+	HMODULE kernel = LoadLibraryA("kernel.dll");
+	if (!kernel)
+	{
+		std::cout << "Nelze nacist kernel.dll!" << std::endl;
+		return 1;
+	}
 
-	
-	//a az simulovany OS skonci, uvolnime zdroje z pameti
+	kiv_hal::TRegisters context;
+
+	// v tuto chvíli DLLMain v kernel.dll měla nahrát na NInterrupt::Bootstrap_Loader adresu vstupní funkce jádra
+	// takže ji spustíme
+	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Bootstrap_Loader, context);
+	// FIXME: pokud kernel.dll z nějakého důvodu neumístí zmíněnou funkci na dané místo, tak zde dojde k pádu celé aplikace
+
+	// a až simulovaný OS skončí, uvolníme zdroje z paměti
 	FreeLibrary(kernel);
 	TlsFree(kiv_hal::Expected_Tls_IDT_Index);
+
 	return 0;
 }

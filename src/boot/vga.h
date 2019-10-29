@@ -2,4 +2,7 @@
 
 #include "../api/hal.h"
 
-void __stdcall VGA_Handler(kiv_hal::TRegisters &context);
+namespace VGA
+{
+	void __stdcall InterruptHandler(kiv_hal::TRegisters & context);
+}
