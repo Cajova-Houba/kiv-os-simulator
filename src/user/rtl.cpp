@@ -45,7 +45,7 @@ static size_t __stdcall ThreadEntry(const kiv_hal::TRegisters & context)
 // vstupní bod obsluhy signálu
 static size_t __stdcall SignalEntry(const kiv_hal::TRegisters & context)
 {
-	kiv_os::NSignal_Id signal = static_cast<kiv_os::NSignal_Id>(context.rcx.l);
+	RTL::Signal signal = static_cast<RTL::Signal>(context.rcx.l);
 
 	if (g_threadEnv.signalHandler)
 	{
@@ -62,16 +62,16 @@ static bool SysCall(kiv_hal::TRegisters & context)
 
 	if (context.flags.carry)
 	{
-		RTL::SetLastError(static_cast<kiv_os::NOS_Error>(context.rax.r));
+		RTL::SetLastError(static_cast<RTL::Error>(context.rax.r));
 		return false;
 	}
 
-	RTL::SetLastError(kiv_os::NOS_Error::Success);
+	RTL::SetLastError(RTL::Error::SUCCESS);
 
 	return true;
 }
 
-static void ConfigureSignal(kiv_os::NSignal_Id signal, uint32_t signalMask)
+static void ConfigureSignal(RTL::Signal signal, uint32_t signalMask)
 {
 	const uint8_t signalNumber = static_cast<uint8_t>(signal);
 	const bool isActive = (0x1 << signalNumber) & signalMask;
@@ -85,12 +85,86 @@ static void ConfigureSignal(kiv_os::NSignal_Id signal, uint32_t signalMask)
 	SysCall(registers);
 }
 
+static RTL::Handle OpenFileHandle(const char *path, uint8_t flags, uint8_t attributes)
+{
+	kiv_hal::TRegisters registers;
+	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
+	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Open_File);
+	registers.rdx.r = reinterpret_cast<uint64_t>(path);
+	registers.rcx.l = flags;
+	registers.rdi.i = attributes;
+
+	if (!SysCall(registers))
+	{
+		return 0;
+	}
+
+	return registers.rax.x;
+}
+
+static bool SeekFile(RTL::Handle file, kiv_os::NFile_Seek command, int64_t & pos, RTL::Position base)
+{
+	kiv_hal::TRegisters registers;
+	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
+	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Seek);
+	registers.rcx.h = static_cast<uint8_t>(command);
+	registers.rdx.x = file;
+	registers.rdi.r = pos;
+
+	switch (base)
+	{
+		case RTL::Position::BEGIN:
+		{
+			registers.rcx.l = static_cast<uint8_t>(kiv_os::NFile_Seek::Beginning);
+			break;
+		}
+		case RTL::Position::CURRENT:
+		{
+			registers.rcx.l = static_cast<uint8_t>(kiv_os::NFile_Seek::Current);
+			break;
+		}
+		case RTL::Position::END:
+		{
+			registers.rcx.l = static_cast<uint8_t>(kiv_os::NFile_Seek::End);
+			break;
+		}
+	}
+
+	if (!SysCall(registers))
+	{
+		return false;
+	}
+
+	if (command == kiv_os::NFile_Seek::Get_Position)
+	{
+		pos = registers.rax.r;
+	}
+
+	return true;
+}
+
+
+bool RTL::CloseHandle(RTL::Handle handle)
+{
+	kiv_hal::TRegisters registers;
+	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
+	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Close_Handle);
+	registers.rdx.x = handle;
+
+	if (!SysCall(registers))
+	{
+		return false;
+	}
+
+	return true;
+}
+
 
 // ========================
 // ==  Procesy a vlákna  ==
 // ========================
 
-kiv_os::THandle RTL::CreateProcess(const char *program, const RTL::ProcessEnvironment & env)
+RTL::Handle RTL::CreateProcess(const char *program, const RTL::ProcessEnvironment & env)
 {
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::Process);
@@ -108,12 +182,12 @@ kiv_os::THandle RTL::CreateProcess(const char *program, const RTL::ProcessEnviro
 	return registers.rax.x;
 }
 
-kiv_os::THandle RTL::CreateThread(RTL::ThreadMain mainFunc, void *param)
+RTL::Handle RTL::CreateThread(RTL::ThreadMain mainFunc, void *param)
 {
 	ThreadEntryData *pData = new (std::nothrow) ThreadEntryData;
 	if (!pData)
 	{
-		SetLastError(kiv_os::NOS_Error::Out_Of_Memory);
+		SetLastError(RTL::Error::OUT_OF_MEMORY);
 		return 0;
 	}
 
@@ -137,7 +211,7 @@ kiv_os::THandle RTL::CreateThread(RTL::ThreadMain mainFunc, void *param)
 	return registers.rax.x;
 }
 
-int RTL::WaitFor(const kiv_os::THandle *handles, uint16_t count)
+int RTL::WaitForMultiple(const RTL::Handle *handles, uint16_t count)
 {
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::Process);
@@ -153,7 +227,7 @@ int RTL::WaitFor(const kiv_os::THandle *handles, uint16_t count)
 	return registers.rax.x;
 }
 
-int RTL::GetExitCode(kiv_os::THandle handle)
+int RTL::GetExitCode(RTL::Handle handle)
 {
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::Process);
@@ -180,7 +254,7 @@ void RTL::SetupSignals(RTL::SignalHandler handler, uint32_t signalMask)
 	g_threadEnv.signalMask = signalMask;
 
 	// aktualizace nastavení všech signálů
-	ConfigureSignal(kiv_os::NSignal_Id::Terminate, signalMask);  // API definuje pouze jeden signál
+	ConfigureSignal(RTL::Signal::TERMINATE, signalMask);  // API definuje pouze jeden signál
 }
 
 RTL::SignalHandler RTL::GetSignalHandler()
@@ -198,12 +272,12 @@ const char *RTL::GetProcessCmdLine()
 	return g_threadEnv.process.cmdLine;
 }
 
-kiv_os::THandle RTL::GetStdInHandle()
+RTL::Handle RTL::GetStdInHandle()
 {
 	return g_threadEnv.process.stdIn;
 }
 
-kiv_os::THandle RTL::GetStdOutHandle()
+RTL::Handle RTL::GetStdOutHandle()
 {
 	return g_threadEnv.process.stdOut;
 }
@@ -263,29 +337,29 @@ void RTL::SetCurrentThreadExitCode(int exitCode)
 // ==  Chybové kódy  ==
 // ====================
 
-kiv_os::NOS_Error RTL::GetLastError()
+RTL::Error RTL::GetLastError()
 {
 	return g_threadEnv.lastError;
 }
 
-void RTL::SetLastError(kiv_os::NOS_Error error)
+void RTL::SetLastError(RTL::Error error)
 {
 	g_threadEnv.lastError = error;
 }
 
-std::string RTL::ErrorToString(kiv_os::NOS_Error error)
+std::string RTL::ErrorToString(RTL::Error error)
 {
 	switch (error)
 	{
-		case kiv_os::NOS_Error::Success:               return "Vse v poradku";
-		case kiv_os::NOS_Error::Invalid_Argument:      return "Neplatny parametr";
-		case kiv_os::NOS_Error::File_Not_Found:        return "Soubor nenalezen";
-		case kiv_os::NOS_Error::Directory_Not_Empty:   return "Adresar neni prazdny";
-		case kiv_os::NOS_Error::Not_Enough_Disk_Space: return "Nedostatek mista na disku";
-		case kiv_os::NOS_Error::Out_Of_Memory:         return "Nedostatek pameti";
-		case kiv_os::NOS_Error::Permission_Denied:     return "Pristup odepren";
-		case kiv_os::NOS_Error::IO_Error:              return "Chyba IO";
-		case kiv_os::NOS_Error::Unknown_Error:         break;
+		case RTL::Error::SUCCESS:               return "Vse v poradku";
+		case RTL::Error::INVALID_ARGUMENT:      return "Neplatny parametr";
+		case RTL::Error::FILE_NOT_FOUND:        return "Soubor nenalezen";
+		case RTL::Error::DIRECTORY_NOT_EMPTY:   return "Adresar neni prazdny";
+		case RTL::Error::NOT_ENOUGH_DISK_SPACE: return "Nedostatek mista na disku";
+		case RTL::Error::OUT_OF_MEMORY:         return "Nedostatek pameti";
+		case RTL::Error::PERMISSION_DENIED:     return "Pristup odepren";
+		case RTL::Error::IO_ERROR:              return "Chyba IO";
+		case RTL::Error::UNKNOWN_ERROR:         break;
 	}
 
 	return "Neznama chyba";
@@ -296,24 +370,78 @@ std::string RTL::ErrorToString(kiv_os::NOS_Error error)
 // ==  Soubory a standardní vstup/výstup  ==
 // =========================================
 
-kiv_os::THandle RTL::OpenFile(const char *path, kiv_os::NOpen_File flags, kiv_os::NFile_Attributes attributes)
+RTL::Handle RTL::OpenFile(const char *path, bool readOnly)
 {
-	kiv_hal::TRegisters registers;
-	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
-	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Open_File);
-	registers.rcx.l = static_cast<uint8_t>(flags);
-	registers.rdi.i = static_cast<uint16_t>(attributes);
-	registers.rdx.r = reinterpret_cast<uint64_t>(path);
+	uint8_t flags = static_cast<uint8_t>(kiv_os::NOpen_File::fmOpen_Always);
+	uint8_t attributes = 0;
 
-	if (!SysCall(registers))
+	if (readOnly)
 	{
-		return 0;
+		attributes |= FileAttributes::READ_ONLY;
 	}
 
-	return registers.rax.x;
+	return OpenFileHandle(path, flags, attributes);
 }
 
-bool RTL::ReadFile(kiv_os::THandle file, char *buffer, size_t size, size_t *pRead)
+RTL::Handle RTL::OpenDirectory(const char *path)
+{
+	uint8_t flags = static_cast<uint8_t>(kiv_os::NOpen_File::fmOpen_Always);
+	uint8_t attributes = 0;
+
+	attributes |= FileAttributes::READ_ONLY;
+	attributes |= FileAttributes::DIRECTORY;
+
+	return OpenFileHandle(path, flags, attributes);
+}
+
+RTL::Handle RTL::CreateFile(const char *path)
+{
+	uint8_t flags = 0;
+	uint8_t attributes = 0;
+
+	return OpenFileHandle(path, flags, attributes);
+}
+
+RTL::Handle RTL::CreateDirectory(const char *path)
+{
+	uint8_t flags = 0;
+	uint8_t attributes = 0;
+
+	attributes |= FileAttributes::DIRECTORY;
+
+	return OpenFileHandle(path, flags, attributes);
+}
+
+bool RTL::GetDirectoryContent(RTL::Handle handle, std::vector<RTL::DirectoryEntry> & result)
+{
+	result.resize(32);
+
+	size_t pos = 0;
+	while (true)
+	{
+		size_t read = 0;
+		if (!ReadFile(handle, result.data() + pos, (result.size() - pos) * sizeof (DirectoryEntry), &read))
+		{
+			return false;
+		}
+
+		pos += read / sizeof (DirectoryEntry);
+
+		if (pos < result.size())
+		{
+			result.resize(pos);
+			break;
+		}
+		else
+		{
+			result.resize(result.size() * 2);
+		}
+	}
+
+	return true;
+}
+
+bool RTL::ReadFile(kiv_os::THandle file, void *buffer, size_t size, size_t *pRead)
 {
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
@@ -335,7 +463,7 @@ bool RTL::ReadFile(kiv_os::THandle file, char *buffer, size_t size, size_t *pRea
 	return true;
 }
 
-bool RTL::WriteFile(kiv_os::THandle file, const char *buffer, size_t size, size_t *pWritten)
+bool RTL::WriteFile(kiv_os::THandle file, const void *buffer, size_t size, size_t *pWritten)
 {
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
@@ -357,34 +485,26 @@ bool RTL::WriteFile(kiv_os::THandle file, const char *buffer, size_t size, size_
 	return true;
 }
 
-bool RTL::SeekFile(kiv_os::THandle file, kiv_os::NFile_Seek action, kiv_os::NFile_Seek base, int64_t & pos)
+bool RTL::GetFilePos(RTL::Handle file, int64_t & result, RTL::Position base)
 {
-	kiv_hal::TRegisters registers;
-	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
-	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Seek);
-	registers.rcx.h = static_cast<uint8_t>(action);
-	registers.rcx.l = static_cast<uint8_t>(base);
-	registers.rdx.x = file;
-	registers.rdi.r = pos;
+	return SeekFile(file, kiv_os::NFile_Seek::Get_Position, result, base);
+}
 
-	if (!SysCall(registers))
-	{
-		return false;
-	}
+bool RTL::SetFilePos(RTL::Handle file, int64_t pos, RTL::Position base)
+{
+	return SeekFile(file, kiv_os::NFile_Seek::Set_Position, pos, base);
+}
 
-	if (action == kiv_os::NFile_Seek::Get_Position)
-	{
-		pos = registers.rax.r;
-	}
-
-	return true;
+bool RTL::SetFileSize(RTL::Handle file, int64_t pos, RTL::Position base)
+{
+	return SeekFile(file, kiv_os::NFile_Seek::Set_Size, pos, base);
 }
 
 bool RTL::DeleteFile(const char *path)
 {
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
-	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Close_Handle);
+	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Delete_File);
 	registers.rdx.r = reinterpret_cast<uint64_t>(path);
 
 	if (!SysCall(registers))
@@ -393,6 +513,46 @@ bool RTL::DeleteFile(const char *path)
 	}
 
 	return true;
+}
+
+bool RTL::DeleteDirectory(const char *path, bool recursively)
+{
+	if (recursively)
+	{
+		Directory dir;
+		if (!dir.open(path))
+		{
+			return false;
+		}
+
+		std::string dirPath = path;
+		if (!dirPath.empty() && dirPath.back() != '\\')
+		{
+			dirPath += '\\';
+		}
+
+		for (const DirectoryEntry & entry : dir.getContent())
+		{
+			bool status = true;
+
+			if (entry.attributes & FileAttributes::DIRECTORY)
+			{
+				// rekurze... není to úplně dobré, ale neměl by s tím být žádný problém
+				status = DeleteDirectory(dirPath + entry.name, recursively);
+			}
+			else
+			{
+				status = DeleteFile(dirPath + entry.name);
+			}
+
+			if (!status)
+			{
+				return false;
+			}
+		}
+	}
+
+	return DeleteFile(path);
 }
 
 
@@ -419,21 +579,6 @@ RTL::Pipe RTL::CreatePipe()
 	pipe.writeEnd = handles[0];
 
 	return pipe;
-}
-
-bool RTL::CloseHandle(kiv_os::THandle handle)
-{
-	kiv_hal::TRegisters registers;
-	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
-	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_File_System::Close_Handle);
-	registers.rdx.x = handle;
-
-	if (!SysCall(registers))
-	{
-		return false;
-	}
-
-	return true;
 }
 
 void RTL::Shutdown()
