@@ -3,6 +3,8 @@
 #include "kernel.h"
 #include "io.h"
 #include "util.h"
+#include "fat.h"
+#include "filesystem.h"
 
 static void PrintMsg(const char *msg, size_t length)
 {
@@ -73,6 +75,39 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 		PrintMsg(" o velikosti ");
 		PrintMsg(Util::NumberToString(diskSize));
 		PrintMsg(" B\n");
+
+		// inicializace/kontrola pritomnosti FS
+		Boot_record fsBootRec;
+		uint16_t isValidFs = Filesystem::GetFilesystemDescription(i, &fsBootRec);
+
+		if (Filesystem::Error::NO_FILE_SYSTEM == isValidFs) {
+			PrintMsg("Nenalezen zadny filesystem.\n");
+			if (!Filesystem::InitNewFileSystem(i)) {
+				// chyba pri inicializaci
+				PrintMsg("Chyba pri inicializaci FS.\n");
+			}
+			else {
+				// ok
+				PrintMsg("Filesystem inicializovan na disku ");
+				PrintMsg(Util::NumberToHexString(i));
+				PrintMsg("\n");
+			}
+		}
+		else if (Filesystem::Error::SUCCESS == isValidFs) {
+			PrintMsg("Nalezen boot record fat.\n");
+			PrintMsg("Deskriptor: '");
+			PrintMsg(fsBootRec.volume_descriptor);
+			PrintMsg("'\n");
+			PrintMsg("Pouzitelnych clusteru: ");
+			PrintMsg(Util::NumberToString(fsBootRec.usable_cluster_count));
+			PrintMsg("\n");
+		}
+		else {
+			PrintMsg("Chyba pri cteni FS: ");
+			PrintMsg(Util::NumberToString(isValidFs));
+			PrintMsg("\n");
+		}
+
 	}
 
 	HMODULE userDLL = LoadLibraryA("user.dll");

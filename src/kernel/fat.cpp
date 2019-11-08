@@ -1,4 +1,3 @@
-
 #include <string>
 #include <cstdlib>
 #include "fat.h"
@@ -511,4 +510,50 @@ int unused_cluster_count(int32_t *fat, int fat_length) {
     }
 
     return count;
+}
+
+bool is_valid_fat(Boot_record * boot_record)
+{
+	return boot_record->usable_cluster_count > 0;
+}
+
+int init_fat(char* buffer) {
+    Boot_record new_record;
+    std::string volume_desc("Test volume.");
+    std::string signature("valesz");
+    int32_t fat_table[252];
+    int i = 0;
+
+    fat_table[0] = ROOT_CLUSTER;
+    for(i = 1; i < 251; i++) {
+        fat_table[i] = FAT_UNUSED;
+    }
+
+    // fill the descriptor with 0s
+    // then copy the actual description
+    memset(new_record.volume_descriptor, 0x0, DESCRIPTION_LEN);
+    volume_desc.copy(new_record.volume_descriptor, volume_desc.length());
+
+    // do the same for the signature
+    memset(new_record.signature, 0x0, SIGNATURE_LEN);
+    signature.copy(new_record.signature, signature.length());
+
+    // FAT8
+    // 256 clusters, 4 reserved
+    // 1 cluster = 256 B
+    new_record.fat_type = 0;
+    new_record.fat_copies = 1;
+    new_record.usable_cluster_count = 252;
+    new_record.cluster_size = 256;
+
+	// boot sector
+	memcpy(buffer, &new_record, sizeof(Boot_record));
+
+    // fat table
+	memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE]), &fat_table, sizeof(fat_table));
+
+    // fat table copy
+	memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE]), &fat_table, sizeof(fat_table));
+
+    return 0;
 }
