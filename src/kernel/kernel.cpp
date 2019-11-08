@@ -5,6 +5,7 @@
 #include "util.h"
 #include "fat.h"
 #include "filesystem.h"
+#include "fserrors.h"
 
 static void PrintMsg(const char *msg, size_t length)
 {
@@ -78,13 +79,16 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 
 		// inicializace/kontrola pritomnosti FS
 		Boot_record fsBootRec;
-		uint16_t isValidFs = Filesystem::GetFilesystemDescription(i, &fsBootRec);
+		uint16_t status = Filesystem::GetFilesystemDescription(i, params, &fsBootRec);
 
-		if (Filesystem::Error::NO_FILE_SYSTEM == isValidFs) {
+		if (FsError::NO_FILE_SYSTEM == status) {
 			PrintMsg("Nenalezen zadny filesystem.\n");
-			if (!Filesystem::InitNewFileSystem(i)) {
+			status = Filesystem::InitNewFileSystem(i, params);
+			if (FsError::SUCCESS != status) {
 				// chyba pri inicializaci
-				PrintMsg("Chyba pri inicializaci FS.\n");
+				PrintMsg("Chyba pri inicializaci FS: ");
+				PrintMsg(Util::NumberToString(status));
+				PrintMsg("\n");
 			}
 			else {
 				// ok
@@ -93,7 +97,10 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 				PrintMsg("\n");
 			}
 		}
-		else if (Filesystem::Error::SUCCESS == isValidFs) {
+		else if (FsError::SUCCESS == status) {
+			int count = 0;
+			Filesystem::countRoot(i, params, fsBootRec, count);
+
 			PrintMsg("Nalezen boot record fat.\n");
 			PrintMsg("Deskriptor: '");
 			PrintMsg(fsBootRec.volume_descriptor);
@@ -101,10 +108,16 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 			PrintMsg("Pouzitelnych clusteru: ");
 			PrintMsg(Util::NumberToString(fsBootRec.usable_cluster_count));
 			PrintMsg("\n");
+
+			// tohle je jen testovaci vypis a v ostre verzi bude smazan
+			PrintMsg("Pocet itemu v root addr: ");
+			PrintMsg(Util::NumberToString(count));
+			PrintMsg("\n");
+
 		}
 		else {
 			PrintMsg("Chyba pri cteni FS: ");
-			PrintMsg(Util::NumberToString(isValidFs));
+			PrintMsg(Util::NumberToString(status));
 			PrintMsg("\n");
 		}
 

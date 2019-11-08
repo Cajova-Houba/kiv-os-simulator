@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 #include <algorithm>
+#include <sstream>
+#include <vector>
 
 namespace Util
 {
@@ -51,5 +53,13 @@ namespace Util
 	inline std::string SignedNumberToString(int64_t number)
 	{
 		return (number < 0) ? std::string("-") + NumberToString(-number) : NumberToString(number);
+	}
+
+	inline void SplitPath(std::string filePath, std::vector<std::string> & dest) {
+		std::istringstream iss{ filePath };
+		std::string item;
+		while (std::getline(iss, item, '/')) {
+			dest.push_back(item);
+		}
 	}
 }

@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include "../api/hal.h"
+#include "fserrors.h"
 
 
 #define DESCRIPTION_LEN         250
@@ -86,15 +88,42 @@ typedef struct {
 } Directory;
 
 /**
+ * @brief Vrati offset na kterem zacina dany cluster od zacatku pameti (od bytu 0) v bytech.
+ */
+constexpr int cluster_byte_offset(Boot_record& bootRecord, int clusterNum) {
+	return ALIGNED_BOOT_REC_SIZE + sizeof(int32_t)*bootRecord.usable_cluster_count*(bootRecord.fat_copies) + clusterNum*bootRecord.cluster_size;
+}
+
+constexpr int sectors_to_read(uint64_t startSector, int byteOffset, int bytesToRead, uint64_t bytes_per_sector) {
+	// endSector = byteOffset + bytesToRead -> to je posledni sektor ktery jeste musime precist abychom meli vsechna data
+	// endSector - startSector + 1 -> celkovy pocet sektoru mezi startSector a endSector ktery je potreba precist abychom vse nacetli
+	return ((byteOffset + bytesToRead) / bytes_per_sector) - startSector + 1;
+}
+
+/**
+ * @brief Vrati maximalni mozny pocet itemu v adresari pro danou FAT.
+ */
+constexpr int max_items_in_directory(Boot_record& bootRecord) {
+	return bootRecord.cluster_size / sizeof(Directory);
+}
+
+/**
  * @brief Returns true if the boot_record is valid.
  */
 bool is_valid_fat(Boot_record* boot_record);
 
 /**
  * @brief Initializes FAT structure in given buffer. Creates Boot_record and two copies of FAT table.
+ *
+ * Details about the FS:
+ * - cluster_size is set to min(parameters.bytes_per_sector, UINT16_MAX)
+ * - fat_copies is set to 1
+ * - fat_type is set to 0
+ *
  * @param buffer Buffer to write initialized data to. The buffer must be big enough to hold all of the data (2888 B).
+ * @param parameters Drive paramters.
  */
-int init_fat(char* buffer);
+int init_fat(char* buffer, kiv_hal::TDrive_Parameters parameters);
 
 /**
  * @brief Prints boot record.
@@ -110,7 +139,17 @@ void print_boot_record(Boot_record* boot_record);
  *
  * @return OK: boot record loaded. ERR_READING_FILE: error while reading file.
  */
-int load_boot_record(FILE* file, Boot_record* boot_record);
+// todo: do not use, delete
+int load_boot_record_old(FILE* file, Boot_record* boot_record);
+
+/**
+ * @brief Nacte boot record z disku.
+ * 
+ * @param diskNumber Cislo disku ze ktereho se bude cist.
+ * @param parameters Parametry daneho disku, ze ktereho se bude cist.
+ * @param bootRecord Pointer na strukturu do ktere bude nacten boot record.
+ */
+uint16_t load_boot_record(std::uint8_t diskNumber, kiv_hal::TDrive_Parameters parameters, Boot_record* bootRecord);
 
 /**
  * @brief Loads a fat table from file. File table is expected to contain boot_record->usable_cluster_count of records.
@@ -121,7 +160,16 @@ int load_boot_record(FILE* file, Boot_record* boot_record);
  *
  * @return OK: fat table loaded. ERR_READING_FILE: error occurs.
  */
+// todo: do not use this, delete
 int load_fat_table(FILE *file, Boot_record* boot_record, int32_t* dest);
+
+/**
+ * @brief Loads the FAT table from disk and stores it to dest.
+ * @return
+ *	FsError::SUCCESS tabulka nactena.
+ *  FsError::DISK_OPERATION_ERROR chyba pri cteni z disku.
+ */
+uint16_t load_fat(std::uint8_t diskNumber, kiv_hal::TDrive_Parameters parameters, Boot_record& bootRecord, uint32_t* dest);
 
 /**
  * @brief Loads contents of directory from file (in a specified cluster) and stores them to dest.
@@ -132,7 +180,17 @@ int load_fat_table(FILE *file, Boot_record* boot_record, int32_t* dest);
  *
  * @return: Number of items in the dir load. ERR_READING_FILE if error occurs.
  */
-int load_dir(FILE *file, Boot_record *boot_record, int cluster, Directory *dest);
+int load_dir_old(FILE *file, Boot_record *boot_record, int cluster, Directory *dest);
+
+/**
+ * @brief Nacte soubor (v danem clusteru) a ulozi jej do dest.
+ * 
+ * @param cluster Cislo clsteru na kterem zacinaji data souboru. Pokud 0, nacte se root dir.
+ * 
+ * @return
+ *	FsError::SUCCESS soubor nacten.
+ */
+uint16_t load_file(std::uint8_t diskNumber, kiv_hal::TDrive_Parameters parameters, Boot_record & bootRecord, int cluster, Directory *dest);
 
 /**
  * Counts the number of items in directory.
@@ -141,7 +199,16 @@ int load_dir(FILE *file, Boot_record *boot_record, int cluster, Directory *dest)
  * count: 	everything is ok
  * NOK: 	if error occurs
  */
-int count_items_in_dir(FILE *file, Boot_record *boot_record, Directory *dir);
+int count_items_in_dir_old(FILE *file, Boot_record *boot_record, Directory *dir);
+
+/**
+ * @brief Spocte pocet souboru v danem adresari a ulozi jej do dest.
+ *
+ * @return 
+ *	FsError::SUCCSESS pocet polozek spocten.
+ *  FsError::NOT_A_DIR pokud dir neni slozka.
+ */
+uint16_t count_items_in_dir(std::uint8_t diskNumber, kiv_hal::TDrive_Parameters parameters, Boot_record& bootRecord, Directory & dir, int& dest);
 
 /**
  * Prints directory structure to the buffer.
@@ -153,7 +220,7 @@ void print_dir(char* buffer, Directory *directory, int level);
  * Returns the max number of items (Directory structs) in directory.
  * The dir can be max 1 cluster => num = cluster_size / sizeof(Directory)
  */
-int max_items_in_directory(Boot_record *boot_record);
+int max_items_in_directory_old(Boot_record *boot_record);
 
 /**
  * Returns the first unused cluster found or NO_CLUSTER.
@@ -193,6 +260,12 @@ int get_free_directory_in_cluster(FILE *file, Boot_record *boot_record, int32_t 
  * Tries to locate the file by it's full filename (specified by path).
  * If the file is found, found_file and parent_directory will be filled (if not NULL).
  * if the file is in the root dir, parent_directory.start_cluster will be ROOT_CLUSTER.
+ * 
+ * @param file Pointer to file to read from.
+ * @param boot_record Pointer to the structure with FAT metadata.
+ * @param path Absolute path to directory represented as array.
+ * @param found_file Pointer to the structure to be filled with target file. Ignored if NULL.
+ * @param parent_directory Parent directory of the found directory. Ignored if null.
  *
  * @return
  * file position in parent dir: file found.
@@ -253,3 +326,10 @@ int find_in_dir(FILE *file, Boot_record *boot_record, char *filename, int direct
  * @return Number of cluster marked as UNUSED.
  */
 int unused_cluster_count(int32_t *fat, int fat_length);
+
+/**
+ * @brief Zavola syscall na cteni z disku a data ulozi do buffer.
+ * @return 
+ *	FsError::SUCCESS Pokud nacteni probehne v poradku.
+ */
+uint16_t read_from_disk(std::uint8_t diskNumber, uint64_t startSector, uint64_t sectorCount, char* buffer);
