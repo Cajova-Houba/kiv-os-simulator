@@ -56,10 +56,15 @@ namespace Util
 	}
 
 	inline void SplitPath(std::string filePath, std::vector<std::string> & dest) {
+		// todo: podpora pro relativni cesty
 		std::istringstream iss{ filePath };
 		std::string item;
+		bool first = true;
 		while (std::getline(iss, item, '/')) {
-			dest.push_back(item);
+			if (!first) {
+				dest.push_back(item);
+			}
+			first = false;
 		}
 	}
 }

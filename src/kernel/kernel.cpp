@@ -99,7 +99,6 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 		}
 		else if (FsError::SUCCESS == status) {
 			int count = 0;
-			Filesystem::countRoot(i, params, fsBootRec, count);
 
 			PrintMsg("Nalezen boot record fat.\n");
 			PrintMsg("Deskriptor: '");
@@ -110,10 +109,32 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 			PrintMsg("\n");
 
 			// tohle je jen testovaci vypis a v ostre verzi bude smazan
+			std::vector<Directory> itemsInRoot;
+			Filesystem::LoadDirContents(i, params, "/direct-1", itemsInRoot);
 			PrintMsg("Pocet itemu v root addr: ");
-			PrintMsg(Util::NumberToString(count));
+			PrintMsg(Util::NumberToString(itemsInRoot.size()));
 			PrintMsg("\n");
+			for (size_t i = 0; i < itemsInRoot.size(); i++)
+			{
+				PrintMsg("- ");
+				PrintMsg(itemsInRoot[i].name);
+				PrintMsg("\n");
+			}
 
+			char fileBuffer[4*4096];
+			uint16_t isReadError = Filesystem::ReadFileContents(i, params, "/pohadka.txt", fileBuffer);
+			fileBuffer[4*4096-1] = '\0';
+			if (!isReadError) {
+				PrintMsg("Obsah souboru /pohadka.txt: \n");
+				PrintMsg(fileBuffer);
+				PrintMsg("\n");
+			}
+			else {
+				PrintMsg("Chyba pri cteni souboru: ");
+				PrintMsg(Util::NumberToString(isReadError));
+				PrintMsg("\n");
+			}
+			
 		}
 		else {
 			PrintMsg("Chyba pri cteni FS: ");
