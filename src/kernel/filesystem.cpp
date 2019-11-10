@@ -16,19 +16,7 @@ uint16_t Filesystem::InitNewFileSystem(const std::uint8_t diskNumber, const  kiv
 	// vytvori boot rec pro FAT a samotnou FAT
 	init_fat(parameters, buffer);
 
-	addressPacket.lba_index = 0;			// zacni na sektoru 0
-	addressPacket.count = 6;				// zapis 6 sektoru
-	addressPacket.sectors = buffer;			// data pro zapis na disk
-
-	registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Write_Sectors);		// jakou operaci nad diskem provest
-	registers.rdi.r = reinterpret_cast<uint64_t>(&addressPacket);					// info pro cteni dat
-	registers.rdx.l = diskNumber;													// cislo disku na ktery zapisovat
-	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, registers);		// syscall pro praci s diskem
-	if (registers.flags.carry) {
-		// chyba pri zapisu na disk
-		return FsError::DISK_OPERATION_ERROR;
-	}
-	return FsError::SUCCESS;
+	return write_to_disk(diskNumber, 0, 6, buffer);
 }
 
 uint16_t Filesystem::GetFilesystemDescription(const std::uint8_t diskNumber,const  kiv_hal::TDrive_Parameters parameters, Boot_record* bootRecord)

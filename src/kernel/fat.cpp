@@ -33,10 +33,10 @@ uint16_t load_boot_record(const std::uint8_t diskNumber, const kiv_hal::TDrive_P
 	kiv_hal::TDisk_Address_Packet addressPacket;
 	
 	// kolik sektoru nacist
-	const uint64_t sectorsToRead = ceil(ALIGNED_BOOT_REC_SIZE / (float)parameters.bytes_per_sector);
+	const uint64_t sectorsToRead = (uint64_t) ceil(ALIGNED_BOOT_REC_SIZE / (float)parameters.bytes_per_sector);
 
 	// podle sektoru vypoctena potrebna velikost bufferu
-	const int bufferSize = sectorsToRead * parameters.bytes_per_sector;
+	const uint64_t bufferSize = sectorsToRead * parameters.bytes_per_sector;
 	char* buffer = new char[bufferSize];
 
 	addressPacket.count = sectorsToRead;	// precti x sektoru
@@ -109,7 +109,7 @@ uint16_t load_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 	char* buffer = new char[sectorCount * parameters.bytes_per_sector];
 
 	// na kterem bytu v bufferu zacinaji relevantni data?
-	const int bufferOffset = byteOffset - startSector * parameters.bytes_per_sector;
+	const uint64_t bufferOffset = byteOffset - startSector * parameters.bytes_per_sector;
 
 	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, buffer);
 	if (readRes != FsError::SUCCESS) {
@@ -149,7 +149,7 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const kiv_hal::TDrive_
 	Directory* dirItems = new Directory[itemsInDirectory];
 
 	// na kterem bytu v bufferu zacinaji relevantni data?
-	const int bufferOffset = byteOffset - startSector * parameters.bytes_per_sector;
+	const uint64_t bufferOffset = byteOffset - startSector * parameters.bytes_per_sector;
 
 	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, buffer);
 
@@ -401,7 +401,7 @@ uint16_t find_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 	bool searchForFile = true;
 	uint16_t res = FsError::FILE_NOT_FOUND;
 	int currPathItem = 0;
-	size_t i = 0;
+	int i = 0;
 
 	// nacti obsah rootu
 	tmpParentDir.start_cluster = ROOT_CLUSTER;
@@ -654,12 +654,12 @@ int unused_cluster_count(int32_t *fat, int fat_length) {
     return count;
 }
 
-size_t is_item_in_dir(const std::string itemName, const std::vector<Directory>& items)
+int is_item_in_dir(const std::string itemName, const std::vector<Directory>& items)
 {
 	for (size_t i = 0; i < items.size(); i++)
 	{
 		if (itemName.compare(items[i].name) == 0) {
-			return i;
+			return (int)i;
 		}
 	}
 	return -1;
@@ -702,7 +702,7 @@ uint16_t write_to_disk(const std::uint8_t diskNumber, const uint64_t startSector
 	addressPacket.count = sectorCount;		// zapis x sektoru
 	addressPacket.sectors = buffer;			// data pro zapis
 
-	registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Read_Sectors);		// jakou operaci nad diskem provest
+	registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Write_Sectors);		// jakou operaci nad diskem provest
 	registers.rdi.r = reinterpret_cast<uint64_t>(&addressPacket);					// info pro cteni dat
 	registers.rdx.l = diskNumber;													// cislo disku ze ktereho cist
 	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, registers);		// syscall pro praci s diskem

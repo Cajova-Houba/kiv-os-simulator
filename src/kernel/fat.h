@@ -320,7 +320,7 @@ int unused_cluster_count(int32_t *fat, int fat_length);
  *  >=0 pokud je polozka nalezena
  *  < 0 pokud neni nalezena.
  */
-size_t is_item_in_dir(const std::string itemName, const std::vector<Directory> & items);
+int is_item_in_dir(const std::string itemName, const std::vector<Directory> & items);
 
 /**
  * @brief Zkopiruje informace ze source do dest.
