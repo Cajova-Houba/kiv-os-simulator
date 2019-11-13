@@ -107,10 +107,13 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 			PrintMsg("Pouzitelnych clusteru: ");
 			PrintMsg(Util::NumberToString(fsBootRec.usable_cluster_count));
 			PrintMsg("\n");
+			PrintMsg("Bytes per sector: ");
+			PrintMsg(Util::NumberToString(fsBootRec.bytes_per_sector));
+			PrintMsg("\n");
 
 			// tohle je jen testovaci vypis a v ostre verzi bude smazan
 			std::vector<Directory> itemsInRoot;
-			Filesystem::LoadDirContents(i, params, "/direct-1", itemsInRoot);
+			Filesystem::LoadDirContents(i, "/", itemsInRoot);
 			PrintMsg("Pocet itemu v root addr: ");
 			PrintMsg(Util::NumberToString(itemsInRoot.size()));
 			PrintMsg("\n");
@@ -122,8 +125,8 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 			}
 
 			char fileBuffer[4*4096];
-			uint16_t isReadError = Filesystem::ReadFileContents(i, params, "/pohadka.txt", fileBuffer);
-			fileBuffer[4*4096-1] = '\0';
+			uint16_t isReadError = Filesystem::ReadFileContents(i, "/pohadka.txt", fileBuffer, 547);
+			fileBuffer[547-1] = '\0';
 			if (!isReadError) {
 				PrintMsg("Obsah souboru /pohadka.txt: \n");
 				PrintMsg(fileBuffer);

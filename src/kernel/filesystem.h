@@ -6,27 +6,27 @@
 #include "fserrors.h"
 
 /**
- * Abstrakce nad implementací file systému. Volá Disk_IO syscall.
+ * Abstrakce nad implementacÃ­ file systÃ©mu. VolÃ¡ Disk_IO syscall.
  */
 namespace Filesystem {
 
 	/**
-	 * @brief Inicializuje filesystem na zadaném disku.
-	 * @param diskNumber Èíslo disku, na kterém má být inicializovaný nový FS.
+	 * @brief Inicializuje filesystem na zadanÃ©m disku.
+	 * @param diskNumber ÄŒÃ­slo disku, na kterÃ©m mÃ¡ bÃ½t inicializovanÃ½ novÃ½ FS.
 	 * @param parameters Parametry disku.
 	 *
-	 * @return true pokud inicializace probìhla v poøádku.
+	 * @return true pokud inicializace probÄ›hla v poÅ™Ã¡dku.
 	 */
 	uint16_t InitNewFileSystem(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters);
 
 	/**
 	 * @brief Vrati popis filesystemu na danem disku.
-	 * @param diskNumber Èíslo disku s FS.
+	 * @param diskNumber ÄŒÃ­slo disku s FS.
 	 * @param parameters Parametry disku, ze ktereho se bude cist.
 	 * @param boot_record Reference na strukturu do ktere se naplni data o FS.
 	 * @return 
-	 *	FsError::SUCCESS pokud disk obsahuje validní file system
-	 *  FsError::NO_FILE_SYSTEM pokud disk neobsahuje validní file system
+	 *	FsError::SUCCESS pokud disk obsahuje validnÃ­ file system
+	 *  FsError::NO_FILE_SYSTEM pokud disk neobsahuje validnÃ­ file system
 	 *  FsError::DISK_OPERATION_ERROR pokud dojde k chybe pri cteni disku
 	 */
 	uint16_t GetFilesystemDescription(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, Boot_record* bootRecord);
@@ -35,7 +35,6 @@ namespace Filesystem {
 	 * @brief Nacte obsah slozky dane fileName.
 	 * 
 	 * @param diskNumber Cislo disku, ze ktereho se ma cist.
-	 * @param parameters Parametry disku ze ktereho se bude cist.
 	 * @param fileName Absolutni cesta k adresari.
 	 * @param dest Reference na vektor, ktery ma byt naplnen obsahem adresare.
 	 *
@@ -45,21 +44,40 @@ namespace Filesystem {
 	 *  FsError::FILE_NOT_FOUND pokud cilovy soubor nebyl nalezen
 	 *  FsError::DISK_OPERATION_ERROR pokud dojde k chybe pri cteni z disku.
 	 */
-	uint16_t LoadDirContents(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const std::string fileName, std::vector<Directory>& dest);
+	uint16_t LoadDirContents(const std::uint8_t diskNumber, const std::string fileName, std::vector<Directory>& dest);
 
 	/**
 	 * @brief Nacte obsah souboru do bufferu.
 	 *
 	 * @param diskNumber Cislo disku, ze ktereho se ma cist.
-	 * @param parameters Parametry disku ze ktereho se bude cist.
 	 * @param fileName Absolutni cesta k souboru.
 	 * @param buffer Ukazatel na buffer do ktereho se bude zapisovat obsah souboru.
+	 * @param bufferLen Maximalni pouzitelna velikost bufferu
 	 *
 	 * @return
 	 *	FsError::SUCCESS pokud byl obsah v poradku nacten.
 	 */
-	uint16_t ReadFileContents(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const std::string fileName, char* buffer);
+	uint16_t ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char* buffer, size_t bufferLen);
 
-	// todo: jenom testovaci, bude smazano
-	void countRoot(std::uint8_t diskNumber, kiv_hal::TDrive_Parameters params, Boot_record& bootRec, int& cnt);
+	/**
+	 * @brief Zapise obsah bufferu do souboru od daneho offsetu.
+	 *
+	 * @param diskNumber Cislo disku, na ktery se bude zapisovat.
+	 * @param fileName Absolutni cesta k souboru.
+	 * @param offset Offset v bytech od ktereho se bude zapisovat do souboru.
+	 * @param buffer Buffer ze ktereho se budou zapisovat data na disk.
+	 * @param bufferLen Maximalni delka bufferu ze ktereho se zapisuje.
+	 */
+	uint16_t WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char* buffer, size_t bufferLen);
+
+	/**
+	 * @brief Nacte parametry daneho disku.
+	 *
+	 * @param diskNumber Cislo disku jehoz parametry nacist.
+	 * @param parameters Reference na strukturu, ktera bude naplnena.
+	 *
+	 * @return
+	 *	FsError::SUCCESS pokud byly parametry nacteny.
+	 */
+	uint16_t LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters);
 }

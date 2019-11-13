@@ -75,8 +75,9 @@ typedef struct{
     int8_t fat_copies;                          // number of FAT copies,            1B
     int16_t cluster_size;                       // cluster size                     2B
     int32_t usable_cluster_count;               // max number of cluster for data   4B
+	uint16_t bytes_per_sector;					// bytes per 1 sector on HDD		2B
     char signature[SIGNATURE_LEN];              // orion login                      9B
-} Boot_record;//                                                                    267B
+} Boot_record;//                                                                    269B
 
 /*
  * Definition of directory record.
@@ -109,9 +110,9 @@ constexpr int max_items_in_directory(const Boot_record& bootRecord) {
 }
 
 /**
- * @brief Returns true if the boot_record is valid.
+ * @brief Zkontroluje jestli je zadany bootRecord validni.
  */
-bool is_valid_fat(Boot_record* boot_record);
+bool is_valid_fat(Boot_record & bootRecord);
 
 /**
  * @brief inicializuje FAT boot record a tabulku do bufferu.
@@ -124,24 +125,7 @@ bool is_valid_fat(Boot_record* boot_record);
  * @param parameters Parametry disku na kterem se ma FAT inicializovat.
  * @param buffer Buffer na ktery se struktura zapise. Musi mit dostatecnout velikost.
  */
-int init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer);
-
-/**
- * @brief Prints boot record.
- * @param boot_record Pointer to boot record to print.
- */
-void print_boot_record(Boot_record* boot_record);
-
-/**
- * @brief Loads boot record from the file. Boot record is expected to be at the beginning of the file.
- *
- * @param file Pointer to file to read from.
- * @param boot_record Pointer to the boot record strucutre to be filled with data from file.
- *
- * @return OK: boot record loaded. ERR_READING_FILE: error while reading file.
- */
-// todo: do not use, delete
-int load_boot_record_old(FILE* file, Boot_record* boot_record);
+uint16_t init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer);
 
 /**
  * @brief Nacte boot record z disku.
@@ -158,7 +142,7 @@ uint16_t load_boot_record(const std::uint8_t diskNumber, const kiv_hal::TDrive_P
  *	FsError::SUCCESS tabulka nactena.
  *  FsError::DISK_OPERATION_ERROR chyba pri cteni z disku.
  */
-uint16_t load_fat(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record& bootRecord, int32_t* dest);
+uint16_t load_fat(const std::uint8_t diskNumber, const Boot_record& bootRecord, int32_t* dest);
 
 /**
  * @brief Nacte soubor (v danem clusteru) a ulozi jej do dest.
@@ -168,7 +152,7 @@ uint16_t load_fat(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameter
  * @return
  *	FsError::SUCCESS soubor nacten.
  */
-uint16_t load_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord, const int cluster, Directory *dest);
+uint16_t load_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int cluster, Directory *dest);
 
 /**
  * @brief Nacte polozky v adresari do dest.
@@ -177,7 +161,7 @@ uint16_t load_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
  *	FsError::SUCCESS polozky nacteny.
  *	FsError::NOT_A_DIR pokud dir neni slozka.
  */
-uint16_t load_items_in_dir(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest);
+uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest);
 
 /**
  * @brief Precte obsah soboru do bufferu.
@@ -186,7 +170,7 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const kiv_hal::TDrive_
  *	FsError::SUCCESS obsah souboru precten.
  *  FsError::NOT_A_FILE fileToRead neni soubor (ale adresar).
  */
-uint16_t read_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer);
+uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, size_t bufferLen);
 
 /**
  * Returns the first unused cluster found or NO_CLUSTER.
@@ -223,24 +207,6 @@ int get_file_position(FILE *file, Boot_record *boot_record, int parent_dir_clust
 int get_free_directory_in_cluster(FILE *file, Boot_record *boot_record, int32_t *fat, int cluster);
 
 /**
- * Tries to locate the file by it's full filename (specified by path).
- * If the file is found, found_file and parent_directory will be filled (if not NULL).
- * if the file is in the root dir, parent_directory.start_cluster will be ROOT_CLUSTER.
- * 
- * @param file Pointer to file to read from.
- * @param boot_record Pointer to the structure with FAT metadata.
- * @param path Absolute path to directory represented as array.
- * @param found_file Pointer to the structure to be filled with target file. Ignored if NULL.
- * @param parent_directory Parent directory of the found directory. Ignored if null.
- *
- * @return
- * file position in parent dir: file found.
- * NOK:	file not found.
- * ERR_READING_FILE: error while reading the file with fat.
- */
-int find_file_old(FILE *file, Boot_record * boot_record, char **path, int path_length, Directory *found_file, Directory *parent_directory);
-
-/**
  * @brief Pokusi se najit soubor podle zadane filePath. Pokud je sobor nalezen, je ulozen do foundFile a jeho rodicovsky adresar do parentDirectory.
  *        V pripade, ze soubor je v rootu, parentDirectory.start_cluster je nastaven na ROOT_CLUSTER.
  *		  Pokud je filePath prazdna, foundFile.start_cluster je nastaven na ROOT_CLUSTER a foundFile.isFile je nastaven na false.
@@ -252,30 +218,9 @@ int find_file_old(FILE *file, Boot_record * boot_record, char **path, int path_l
  *  FsError::FILE_NOT_FOUND pokud soubor nebyl nalezen.
  *	FsError::NOT_A_DIR pokud nejaky z prvku cesty (krome posledniho) neni adresar.
  */
-uint16_t find_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord,
-	const std::vector<std::string> & filePath, 
+uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord,
+	const std::vector<std::string> & filePath,
 	Directory & foundFile, Directory & parentDirectory);
-
-/**
- * Tries to locate the directory by it's full name (specified by path).
- * if the directory is found, found_directory and parent_directory will be filled (if not NULL).
- * If the directory is in the root dir, parent_directory.start_cluster will be ROOT_CLUSTER.
- *
- * If the path_length is 1, it's assumed that ROOT directory is to be located. In this case, both found_directory and parent_directory
- * will have it's start_cluster field set to ROOT_CLUSTER and 0 will be returned.
- *
- * @param file Pointer to file to read from.
- * @param boot_record Pointer to the structure with FAT metadata.
- * @param path Absolute path to directory represented as array.
- * @param found_directory Pointer to the structure to be filled with found directory. Ignored if NULL.
- * @param parent_directory Parent directory of the found directory. Ignored if null.
- *
- * @return
- * dir position in parent dir: dir found.
- * NOK: dir not found.
- * ERR_READING_FILE: error while reading the file with fat.
- */
-int find_directory_old(FILE *file, Boot_record *boot_record, char **path, int path_length, Directory *found_directory, Directory *parent_directory);
 
 /**
  * Will read the cluster and determines if it's bad - starts and ends with FFFFFF.

@@ -2,31 +2,6 @@
 #include <cstdlib>
 #include "fat.h"
 
-
-/*
- * Loads boot record from the file.
- * Boot record is expected to be at the beginning of the file.
- * The file is assumed to be already opened.
- *
- *
- * Returns:
- * OK: boot record loaded.
- * ERR_READING_FILE: error while reading file.
- */
-int load_boot_record_old(FILE* file, Boot_record* boot_record) {
-    int bytes_read = 0;
-
-    if(file == NULL || boot_record == NULL) {
-        return ERR_READING_FILE;
-    }
-
-    bytes_read = (int)fread(boot_record, sizeof(Boot_record), 1, file);
-    if(bytes_read != 1) {
-        return ERR_READING_FILE;
-    }
-    return OK;
-}
-
 uint16_t load_boot_record(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, Boot_record * bootRecord)
 {
 	kiv_hal::TRegisters registers;
@@ -60,26 +35,13 @@ uint16_t load_boot_record(const std::uint8_t diskNumber, const kiv_hal::TDrive_P
 	return FsError::SUCCESS;
 }
 
-
-/*
- * Prints boot record.
- */
-void print_boot_record(Boot_record* boot_record) {
-    if(boot_record == NULL) {
-        return;
-    }
-
-    printf("Volume description: %s\nFat type: %hhd\nFat copies: %hhd\nCluster size: %hdB\nUsable clusters: %d\nSignature: %s\n",
-            boot_record->volume_descriptor, boot_record->fat_type, boot_record->fat_copies, boot_record->cluster_size, boot_record->usable_cluster_count, boot_record->signature);
-}
-
-uint16_t load_fat(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record& bootRecord, int32_t * dest)
+uint16_t load_fat(const std::uint8_t diskNumber, const Boot_record& bootRecord, int32_t * dest)
 {
 	const size_t fatSizeBytes = (size_t)(bootRecord.usable_cluster_count * sizeof(int32_t));
 
 	// potrebuju nacist fatSizeBytes + ALIGNED_BOOT_REC_SIZE bytu, kolik je to sectoru?
-	const uint64_t sectorCount = (uint64_t)ceil((fatSizeBytes + ALIGNED_BOOT_REC_SIZE) / (float)parameters.bytes_per_sector);
-	char* buffer = new char[sectorCount * parameters.bytes_per_sector];
+	const uint64_t sectorCount = (uint64_t)ceil((fatSizeBytes + ALIGNED_BOOT_REC_SIZE) / (float)bootRecord.bytes_per_sector);
+	char* buffer = new char[sectorCount * bootRecord.bytes_per_sector];
 
 	uint16_t readRes = read_from_disk(diskNumber, 0, sectorCount, buffer);
 	if (readRes != FsError::SUCCESS) {
@@ -97,19 +59,19 @@ uint16_t load_fat(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameter
 	return FsError::SUCCESS;
 }
 
-uint16_t load_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord, const int cluster, Directory * dest)
+uint16_t load_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int cluster, Directory * dest)
 {
 	// od ktereho sektoru zacit cist? 
 	const int byteOffset = cluster_byte_offset(bootRecord, cluster);
-	const uint64_t startSector = byteOffset / parameters.bytes_per_sector;
+	const uint64_t startSector = byteOffset / bootRecord.bytes_per_sector;
 
 	// kolik sektoru nacist, aby obsahovaly vse co chci?
 	const int bytesToRead = sizeof(Directory);
-	const uint64_t sectorCount = sectors_to_read(startSector, byteOffset, bytesToRead, parameters.bytes_per_sector);
-	char* buffer = new char[sectorCount * parameters.bytes_per_sector];
+	const uint64_t sectorCount = sectors_to_read(startSector, byteOffset, bytesToRead, bootRecord.bytes_per_sector);
+	char* buffer = new char[sectorCount * bootRecord.bytes_per_sector];
 
 	// na kterem bytu v bufferu zacinaji relevantni data?
-	const uint64_t bufferOffset = byteOffset - startSector * parameters.bytes_per_sector;
+	const uint64_t bufferOffset = byteOffset - startSector * bootRecord.bytes_per_sector;
 
 	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, buffer);
 	if (readRes != FsError::SUCCESS) {
@@ -127,7 +89,7 @@ uint16_t load_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 	return FsError::SUCCESS;
 }
 
-uint16_t load_items_in_dir(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest)
+uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest)
 {
 	// kontrola, ze je vazne potreba cokoliv delat
 	if (dir.isFile) {
@@ -138,18 +100,18 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const kiv_hal::TDrive_
 
 	// od ktereho sektoru zacit cist? 
 	const int byteOffset = cluster_byte_offset(bootRecord, dir.start_cluster);
-	const uint64_t startSector = byteOffset / parameters.bytes_per_sector;
+	const uint64_t startSector = byteOffset / bootRecord.bytes_per_sector;
 
 	// kolik sektoru nacist, aby obsahovaly vse co chci?
 	// pocitam adresare, takze vsechny itemy (i prazdne)
 	const int itemsInDirectory = max_items_in_directory(bootRecord);
 	const int bytesToRead = sizeof(Directory) * itemsInDirectory;
-	const uint64_t sectorCount = sectors_to_read(startSector, byteOffset, bytesToRead, parameters.bytes_per_sector);
-	char* buffer = new char[sectorCount * parameters.bytes_per_sector];
+	const uint64_t sectorCount = sectors_to_read(startSector, byteOffset, bytesToRead, bootRecord.bytes_per_sector);
+	char* buffer = new char[sectorCount * bootRecord.bytes_per_sector];
 	Directory* dirItems = new Directory[itemsInDirectory];
 
 	// na kterem bytu v bufferu zacinaji relevantni data?
-	const uint64_t bufferOffset = byteOffset - startSector * parameters.bytes_per_sector;
+	const uint64_t bufferOffset = byteOffset - startSector * bootRecord.bytes_per_sector;
 
 	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, buffer);
 
@@ -179,7 +141,7 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const kiv_hal::TDrive_
 	return FsError::SUCCESS;
 }
 
-uint16_t read_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & fileToRead, char * buffer)
+uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & fileToRead, char * buffer, size_t bufferLen)
 {
 	if (!fileToRead.isFile) {
 		return FsError::NOT_A_FILE;
@@ -194,15 +156,17 @@ uint16_t read_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 		sectorCount = 0,
 		bufferOffset = 0;
 	char* sectorBuffer = NULL;
+	size_t currBytesToRead = bootRecord.cluster_size;
+	bool bufferFull = false;
 
 	// po jednom nacitej clustery z disku
-	while (currentCluster != FAT_FILE_END) {
+	while (currentCluster != FAT_FILE_END && !bufferFull) {
 		// cteni po clusterech 
 		byteOffset = cluster_byte_offset(bootRecord, currentCluster);
-		startSector = byteOffset / parameters.bytes_per_sector;
-		sectorCount = sectors_to_read(startSector, byteOffset, bootRecord.cluster_size, parameters.bytes_per_sector);
-		bufferOffset = byteOffset - startSector * parameters.bytes_per_sector;
-		sectorBuffer = new char[sectorCount * parameters.bytes_per_sector];
+		startSector = byteOffset / bootRecord.bytes_per_sector;
+		sectorCount = sectors_to_read(startSector, byteOffset, bootRecord.cluster_size, bootRecord.bytes_per_sector);
+		bufferOffset = byteOffset - startSector * bootRecord.bytes_per_sector;
+		sectorBuffer = new char[sectorCount * bootRecord.bytes_per_sector];
 
 		// nacti sektory obsahujici 1 cluster do sectorBufferu
 		readRes = read_from_disk(diskNumber, startSector, sectorCount, sectorBuffer);
@@ -214,8 +178,14 @@ uint16_t read_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 		}
 
 		// ze sectorBufferu nacti cluster do bufferu
-		memcpy(&(buffer[totalBytes]), &(sectorBuffer[bufferOffset]), bootRecord.cluster_size);
-		totalBytes += bootRecord.cluster_size;
+		// pokud uz je cilovy buffer plny a cely cluster se do nej nevejde,
+		// nacti jen to co muzes
+		if (totalBytes + bootRecord.cluster_size > bufferLen) {
+			currBytesToRead = bufferLen - (totalBytes);
+			bufferFull = true;
+		}
+		memcpy(&(buffer[totalBytes]), &(sectorBuffer[bufferOffset]), currBytesToRead);
+		totalBytes += currBytesToRead;
 		// todo: text v testovacim prakladu ma na konci kazdeho sektoru byte '\0' coz znamena
 		// ze i kdyz se cely text ze souboru nacte (ze vsech clusteru), je vypsana pouze prvni
 		// cast (protoze pak je '\0' a az pak je dalsi cast).
@@ -227,7 +197,7 @@ uint16_t read_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 	}
 
 	// uspesne jme vse precetli
-	if (currentCluster == FAT_FILE_END) {
+	if (currentCluster == FAT_FILE_END || bufferFull) {
 		res = FsError::SUCCESS;
 	}
 
@@ -299,93 +269,7 @@ int get_free_directory_in_cluster(FILE *file, Boot_record *boot_record, int32_t 
 	return free_dir_pos;
 }
 
-int find_file_old(FILE *file, Boot_record * boot_record, char **path, int path_length, Directory *found_file, Directory *parent_directory) {
-	int max_items_in_dir = 0;
-	Directory *dir_items = NULL;
-	int item_count = 0;
-	int ret = NOK;
-	int fp_item = 0;
-	int fp_item_found = NOK;
-	int file_found = NOK;
-	int item = 0;
-	Directory tmp_found_file;
-	Directory tmp_parent_directory;
-
-	// load root dir
-	//max_items_in_dir = max_items_in_directory(boot_record);
-	dir_items = (Directory *)malloc(sizeof(Directory) * max_items_in_dir);
-	//item_count = load_dir_old(file, boot_record, ROOT_CLUSTER, dir_items);
-	if(item_count == ERR_READING_FILE) {
-		free(dir_items);
-		return ERR_READING_FILE;
-	}
-	tmp_parent_directory.start_cluster = ROOT_CLUSTER;
-	tmp_parent_directory.name[0] = '\0';
-
-	// iterate through the items in the current directory and try to find the path item
-	// if the path item is found and it's a dir, load that dir and search again.
-	// if the path item is the last one (file we're searching for) break the loop.
-	file_found = NOK;
-	while(file_found == NOK) {
-		fp_item_found = NOK;
-		for(item = 0; item < item_count; item++) {
-			if(fp_item == path_length -1 ) {
-				// we're searching for the last path item = file
-				if(dir_items[item].isFile && strcmp(dir_items[item].name, path[fp_item]) == 0) {
-					// file found
-					fp_item_found = OK;
-					file_found = OK;
-					ret = item;
-					tmp_found_file = dir_items[item];
-					strcpy_s(tmp_found_file.name, dir_items[item].name);
-					break;
-				}
-			} else {
-				// we're searching for other path item = dir
-				if(!dir_items[item].isFile && strcmp(dir_items[item].name, path[fp_item]) == 0) {
-					fp_item_found = OK;
-					tmp_parent_directory = dir_items[item];
-					strcpy_s(tmp_parent_directory.name, dir_items[item].name);
-					break;
-				}
-			}
-		}
-
-		// check if the file path item was found in the current directory
-		if(fp_item_found == OK) {
-			if(file_found != OK) {
-				// file path item found, but the not the file => move to the next dir
-				// clear the dir_items array and load the contens of the next directory
-				memset(dir_items, '\0', sizeof(Directory)*max_items_in_dir);
-				//item_count = load_dir_old(file, boot_record, tmp_parent_directory.start_cluster, dir_items);
-				if(item_count == ERR_READING_FILE) {
-					free(dir_items);
-					return ERR_READING_FILE;
-				}
-				fp_item++;
-			} else {
-				// file found
-				if(found_file != NULL) {
-					*found_file = tmp_found_file;
-					strcpy_s(found_file->name, tmp_found_file.name);
-				}
-				if(parent_directory != NULL) {
-					*parent_directory = tmp_parent_directory;
-					strcpy_s(parent_directory->name, tmp_parent_directory.name);
-				}
-
-			}
-		} else {
-			// the file was not found
-			free(dir_items);
-			break;
-		}
-	}
-
-	return ret;
-}
-
-uint16_t find_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const Boot_record & bootRecord, const std::vector<std::string>& filePath, Directory & foundFile, Directory & parentDirectory)
+uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const std::vector<std::string>& filePath, Directory & foundFile, Directory & parentDirectory)
 {
 	// pokud neni zadna cesta, vrat root
 	if (filePath.empty()) {
@@ -407,7 +291,7 @@ uint16_t find_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 	tmpParentDir.start_cluster = ROOT_CLUSTER;
 	tmpParentDir.isFile = false;
 	tmpParentDir.name[0] = '\0';
-	opRes = load_items_in_dir(diskNumber, parameters, bootRecord, tmpParentDir, dirItems);
+	opRes = load_items_in_dir(diskNumber, bootRecord, tmpParentDir, dirItems);
 	if (opRes != FsError::SUCCESS) {
 		return opRes;
 	}
@@ -438,7 +322,7 @@ uint16_t find_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 				// zanoreni do prave nalezeneho adresare
 				currPathItem++;
 				copy_dir(tmpParentDir, dirItems[i]);
-				opRes = load_items_in_dir(diskNumber, parameters, bootRecord, tmpParentDir, dirItems);
+				opRes = load_items_in_dir(diskNumber, bootRecord, tmpParentDir, dirItems);
 				if (opRes != FsError::SUCCESS) {
 					searchForFile = false;
 					res = opRes;
@@ -454,106 +338,6 @@ uint16_t find_file(const std::uint8_t diskNumber, const kiv_hal::TDrive_Paramete
 	}
 
 	return res;
-}
-
-int find_directory_old(FILE *file, Boot_record *boot_record, char **path, int path_length, Directory *found_directory, Directory *parent_directory) {
-	int max_items_in_dir = 0;
-	Directory *dir_items = NULL;
-	int item_count = 0;
-	int ret = NOK;
-	int fp_item = 0;
-	int fp_item_found = NOK;
-	int dir_found = NOK;
-	int item = 0;
-	Directory tmp_found_directory;
-	Directory tmp_parent_directory;
-
-	if (path_length == 1) {
-		// root directory
-		if(found_directory != NULL) {
-			found_directory->start_cluster = ROOT_CLUSTER;
-		}
-
-		if(parent_directory != NULL) {
-			parent_directory->start_cluster = ROOT_CLUSTER;
-		}
-
-		return 0;
-	}
-
-	// load root dir
-	//max_items_in_dir = max_items_in_directory_old(boot_record);
-	dir_items = (Directory *)malloc(sizeof(Directory) * max_items_in_dir);
-	//item_count = load_dir_old(file, boot_record, ROOT_CLUSTER, dir_items);
-	if(item_count == ERR_READING_FILE) {
-		free(dir_items);
-		return ERR_READING_FILE;
-	}
-	tmp_parent_directory.start_cluster = ROOT_CLUSTER;
-	tmp_parent_directory.name[0] = '\0';
-
-	// iterate through the items in the current directory and try to find the path item
-	// if the path item is found and it's a dir, load that dir and search again.
-	// if the path item is the last one break the loop.
-	dir_found = NOK;
-	fp_item = 1;
-	while(dir_found == NOK) {
-		fp_item_found = NOK;
-		for(item = 0; item < item_count; item++) {
-			if(fp_item == path_length -1 ) {
-				// we're searching for the last path item
-				if(!dir_items[item].isFile && strcmp(dir_items[item].name, path[fp_item]) == 0) {
-					// dir found
-					fp_item_found = OK;
-					dir_found = OK;
-					ret = item;
-					tmp_found_directory = dir_items[item];
-					strcpy_s(tmp_found_directory.name, dir_items[item].name);
-					break;
-				}
-			} else {
-				// we're searching for other path item
-				if(!dir_items[item].isFile && strcmp(dir_items[item].name, path[fp_item]) == 0) {
-					fp_item_found = OK;
-					tmp_parent_directory = dir_items[item];
-					strcpy_s(tmp_parent_directory.name, dir_items[item].name);
-					break;
-				}
-			}
-		}
-
-		// check if the file path item was found in the current directory
-		if(fp_item_found == OK) {
-			if(dir_found != OK) {
-				// file path item found, but the not the file => move to the next dir
-				// clear the dir_items array and load the contents of the next directory
-				memset(dir_items, '\0', sizeof(Directory)*max_items_in_dir);
-				//item_count = load_dir_old(file, boot_record, tmp_parent_directory.start_cluster, dir_items);
-				if(item_count == ERR_READING_FILE) {
-					free(dir_items);
-					return ERR_READING_FILE;
-				}
-				fp_item++;
-			} else {
-				// directory found
-				if(found_directory != NULL) {
-					*found_directory = tmp_found_directory;
-					strcpy_s(found_directory->name, tmp_found_directory.name);
-				}
-				if(parent_directory != NULL) {
-					*parent_directory = tmp_parent_directory;
-					strcpy_s(parent_directory->name, tmp_parent_directory.name);
-				}
-
-			}
-		} else {
-			// the file was not found
-			free(dir_items);
-			break;
-		}
-	}
-
-	return ret;
 }
 
 int is_cluster_bad(char *cluster, int cluster_size) {
@@ -715,12 +499,12 @@ uint16_t write_to_disk(const std::uint8_t diskNumber, const uint64_t startSector
 	return FsError::SUCCESS;
 }
 
-bool is_valid_fat(Boot_record * boot_record)
+bool is_valid_fat(Boot_record & bootRecord)
 {
-	return boot_record->usable_cluster_count > 0;
+	return bootRecord.usable_cluster_count > 0 && bootRecord.bytes_per_sector > 0;
 }
 
-int init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer) {
+uint16_t init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer) {
     Boot_record new_record;
     std::string volume_desc("KIV/OS volume.");
     std::string signature("kiv-os");
@@ -745,10 +529,11 @@ int init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer) {
     // 256 clusters, 4 reserved
     // 1 cluster = 256 B
 	// todo: use parameters to calculate actual cluster size/count
-    new_record.fat_type = 0;
+    new_record.fat_type = 8;
     new_record.fat_copies = 2;
     new_record.usable_cluster_count = 252;
 	new_record.cluster_size = 256;
+	new_record.bytes_per_sector = parameters.bytes_per_sector;
 
 	// boot sector
 	memcpy(buffer, &new_record, sizeof(Boot_record));
@@ -759,5 +544,5 @@ int init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer) {
     // fat table copy
 	memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE]), &fat_table, sizeof(fat_table));
 
-    return 0;
+    return FsError::SUCCESS;
 }

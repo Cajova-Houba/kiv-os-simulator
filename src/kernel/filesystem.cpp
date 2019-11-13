@@ -1,4 +1,4 @@
-#include "filesystem.h"
+﻿#include "filesystem.h"
 #include "../api/hal.h"
 #include <cstring>
 #include <string>
@@ -25,7 +25,7 @@ uint16_t Filesystem::GetFilesystemDescription(const std::uint8_t diskNumber,cons
 	return is_valid_fat(bootRecord) ? FsError::SUCCESS : FsError::NO_FILE_SYSTEM;
 }
 
-uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  kiv_hal::TDrive_Parameters parameters, const  std::string fileName, std::vector<Directory>& dest)
+uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  std::string fileName, std::vector<Directory>& dest)
 {
 	Boot_record fatBootRec;
 	uint16_t opRes = 0;
@@ -33,6 +33,13 @@ uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  kiv_h
 	std::vector<std::string> filePathItems;
 	Directory dir;
 	Directory parentDir;
+	kiv_hal::TDrive_Parameters parameters;
+
+	// nacti parametry disku
+	opRes = LoadDiskParameters(diskNumber, parameters);
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
 
 	// nacti BR
 	opRes = load_boot_record(diskNumber, parameters, &fatBootRec);
@@ -42,17 +49,17 @@ uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  kiv_h
 
 	// rozdel fileName na jmena
 	Util::SplitPath(fileName, filePathItems);
-	opRes = find_file(diskNumber, parameters, fatBootRec, filePathItems, dir, parentDir);
+	opRes = find_file(diskNumber, fatBootRec, filePathItems, dir, parentDir);
 	if (opRes != FsError::SUCCESS) {
 		return opRes;
 	}
 
 	// nacti itemy a vrat vysledek
-	opRes = load_items_in_dir(diskNumber, parameters, fatBootRec, dir, dest);
+	opRes = load_items_in_dir(diskNumber, fatBootRec, dir, dest);
 	return opRes;
 }
 
-uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, const std::string fileName, char * buffer)
+uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char * buffer, size_t bufferLen)
 {
 	Boot_record fatBootRec;
 	uint16_t opRes = 0;
@@ -61,6 +68,13 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const kiv_h
 	Directory fileToRead;
 	Directory parentDir;
 	int32_t* fatTable = NULL;
+	kiv_hal::TDrive_Parameters parameters;
+
+	// nacti parametry disku
+	opRes = LoadDiskParameters(diskNumber, parameters);
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
 
 	// nacti BR
 	opRes = load_boot_record(diskNumber, parameters, &fatBootRec);
@@ -70,7 +84,7 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const kiv_h
 
 	// nacti FAT
 	fatTable = new int32_t[fatBootRec.usable_cluster_count];
-	opRes = load_fat(diskNumber, parameters, fatBootRec, fatTable);
+	opRes = load_fat(diskNumber, fatBootRec, fatTable);
 	if (opRes != FsError::SUCCESS) {
 		delete[] fatTable;
 		return opRes;
@@ -80,14 +94,14 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const kiv_h
 	Util::SplitPath(fileName, filePathItems);
 
 	// najdi soubor
-	opRes = find_file(diskNumber, parameters, fatBootRec, filePathItems, fileToRead, parentDir);
+	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToRead, parentDir);
 	if (opRes != FsError::SUCCESS) {
 		delete[] fatTable;
 		return opRes;
 	}
 
 	// nacti soubor
-	opRes = read_file(diskNumber, parameters, fatBootRec, fatTable, fileToRead, buffer);
+	opRes = read_file(diskNumber, fatBootRec, fatTable, fileToRead, buffer, bufferLen);
 
 	// uklid
 	delete[] fatTable;
@@ -95,14 +109,25 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const kiv_h
 	return opRes;
 }
 
-void Filesystem::countRoot(std::uint8_t diskNumber, kiv_hal::TDrive_Parameters params, Boot_record & bootRec, int & cnt)
+uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char * buffer, size_t bufferLen)
 {
-	Directory root;
-	std::vector<Directory> items;
-	root.start_cluster = ROOT_CLUSTER;
-	root.isFile = false;
-	load_items_in_dir(diskNumber, params, bootRec, root, items);
-	cnt = items.size();
+	// todo:
+	return FsError::UNKNOWN_ERROR;
+}
+
+uint16_t Filesystem::LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters)
+{
+	kiv_hal::TRegisters registers;
+	registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Drive_Parameters);
+	registers.rdi.r = reinterpret_cast<uint64_t>(&parameters);
+	registers.rdx.l = diskNumber;
+	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, registers);
+
+	if (registers.flags.carry)
+	{
+		FsError::DISK_OPERATION_ERROR;
+	}
+	return FsError::SUCCESS;
 }
 
 
