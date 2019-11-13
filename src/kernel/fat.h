@@ -40,6 +40,10 @@
  */
 #define NO_CLUSTER				-1
 
+// default FAT meta
+#define DEF_FAT_COPIES			 2
+#define DEF_MIN_DATA_CL          252
+
 /*
  * Erros returned by functions declared in this header.
  */
@@ -70,14 +74,14 @@ typedef enum {
  * Definition of boot record.
  */
 typedef struct{
-    char volume_descriptor[DESCRIPTION_LEN];    // FS description,                  250B
-    int8_t fat_type;                            // FAT type (FAT12, FAT16...),      1B
-    int8_t fat_copies;                          // number of FAT copies,            1B
-    int16_t cluster_size;                       // cluster size                     2B
-    int32_t usable_cluster_count;               // max number of cluster for data   4B
-	uint16_t bytes_per_sector;					// bytes per 1 sector on HDD		2B
-    char signature[SIGNATURE_LEN];              // orion login                      9B
-} Boot_record;//                                                                    269B
+    char volume_descriptor[DESCRIPTION_LEN];    // FS description,							250B
+    int8_t fat_type;                            // FAT type (FAT12, FAT16...),				1B
+    int8_t fat_copies;                          // number of FAT copies,					1B
+    int16_t cluster_size;                       // cluster size (# of sectors per cluster)	2B
+    int32_t usable_cluster_count;               // max number of cluster for data			4B
+	int16_t bytes_per_sector;					// number of bytes in 1 sector				2B
+    char signature[SIGNATURE_LEN];              // orion login								9B
+} Boot_record;//																			269B
 
 /*
  * Definition of directory record.
@@ -90,10 +94,21 @@ typedef struct {
 } Directory;
 
 /**
+ * @brief Vrati cislo prvniho datoveho sektoru na disku (ve FAT cluster 0).
+ */
+constexpr uint64_t first_data_sector(const Boot_record& bootRecord) {
+	return ceil((ALIGNED_BOOT_REC_SIZE
+		+ sizeof(int32_t) * bootRecord.usable_cluster_count * bootRecord.fat_copies)
+		/ (float)bootRecord.bytes_per_sector);
+}
+
+/**
  * @brief Vrati offset na kterem zacina dany cluster od zacatku pameti (od bytu 0) v bytech.
  */
 constexpr int cluster_byte_offset(const Boot_record& bootRecord, int clusterNum) {
-	return ALIGNED_BOOT_REC_SIZE + sizeof(int32_t)*bootRecord.usable_cluster_count*(bootRecord.fat_copies) + clusterNum*bootRecord.cluster_size;
+	return ALIGNED_BOOT_REC_SIZE 
+		+ sizeof(int32_t)*bootRecord.usable_cluster_count*(bootRecord.fat_copies) 
+		+ clusterNum*(bootRecord.cluster_size * bootRecord.bytes_per_sector);
 }
 
 constexpr uint64_t sectors_to_read(const uint64_t startSector, const int byteOffset, const int bytesToRead, const uint64_t bytes_per_sector) {
@@ -106,7 +121,7 @@ constexpr uint64_t sectors_to_read(const uint64_t startSector, const int byteOff
  * @brief Vrati maximalni mozny pocet itemu v adresari pro danou FAT.
  */
 constexpr int max_items_in_directory(const Boot_record& bootRecord) {
-	return bootRecord.cluster_size / sizeof(Directory);
+	return (bootRecord.bytes_per_sector * bootRecord.cluster_size) / sizeof(Directory);
 }
 
 /**
@@ -134,7 +149,7 @@ uint16_t init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer);
  * @param parameters Parametry daneho disku, ze ktereho se bude cist.
  * @param bootRecord Pointer na strukturu do ktere bude nacten boot record.
  */
-uint16_t load_boot_record(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, Boot_record* bootRecord);
+uint16_t load_boot_record(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, Boot_record& bootRecord);
 
 /**
  * @brief Loads the FAT table from disk and stores it to dest.
@@ -173,9 +188,19 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bo
 uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, size_t bufferLen);
 
 /**
+ * @brief Zapise do existujiciho souboru data z bufferu.
+ *
+ * @param offset Offset v bytech od ktereho se ma zapisovat. Pokud presahuje soucasnou velikost souboru, souboru bude rozsiren o nuly.
+ *
+ * @return
+ *	FsError::SUCCESS uspesne zapsano do souboru.
+ */
+uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToWriteTo, size_t offset, char* buffer, size_t bufferLen);
+
+/**
  * Returns the first unused cluster found or NO_CLUSTER.
  */
-int get_free_cluster(int32_t *fat, int fat_size);
+int get_free_cluster(const int32_t *fat, const int fat_size);
 
 /**
  * Returns the position where data clusters start.
@@ -271,6 +296,13 @@ int is_item_in_dir(const std::string itemName, const std::vector<Directory> & it
  * @brief Zkopiruje informace ze source do dest.
  */
 void copy_dir(Directory & dest, const Directory & source);
+
+/**
+ * @brief Precte zadany, souvisly rozsah clusteru do bufferu.
+ * 
+ * @param bufferLen Maximalni pocet bytu ktery nacist do bufferu. Relevantni jen pokud je tento pocet mensi nez pocet clusteru * velikost clusteru.
+ */
+uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char* buffer, const size_t bufferLen);
 
 /**
  * @brief Zavola syscall na cteni z disku a data ulozi do buffer.

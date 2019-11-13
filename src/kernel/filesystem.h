@@ -29,7 +29,7 @@ namespace Filesystem {
 	 *  FsError::NO_FILE_SYSTEM pokud disk neobsahuje validní file system
 	 *  FsError::DISK_OPERATION_ERROR pokud dojde k chybe pri cteni disku
 	 */
-	uint16_t GetFilesystemDescription(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, Boot_record* bootRecord);
+	uint16_t GetFilesystemDescription(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, Boot_record & bootRecord);
 
 	/**
 	 * @brief Nacte obsah slozky dane fileName.
@@ -69,6 +69,18 @@ namespace Filesystem {
 	 * @param bufferLen Maximalni delka bufferu ze ktereho se zapisuje.
 	 */
 	uint16_t WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char* buffer, size_t bufferLen);
+
+	/**
+	 * @brief Vytvori zadany adresar.
+	 *
+	 * @param diskNumber Cislo na disku na kterem bude adresar vytvoren.
+	 * @param dirName Absolutni cesta k adresari, nekoncici '/'. 
+	 *
+	 * @return
+	 *	FsError::SUCCESS adresar vytvoren.
+	 *  FsError::FILE_NOT_FOUND rodicovksy adresar nenalezen.
+	 */
+	uint16_t CreateDirectory(const std::uint8_t diskNumber, const std::string dirName);
 
 	/**
 	 * @brief Nacte parametry daneho disku.

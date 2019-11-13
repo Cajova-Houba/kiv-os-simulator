@@ -8,6 +8,7 @@ enum FsError : uint16_t {
 	NOT_A_DIR,
 	NOT_A_FILE,
 	FILE_NOT_FOUND,
+	FULL_DISK,
 
 	UNKNOWN_ERROR = 0xFFFF
 };

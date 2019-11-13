@@ -19,7 +19,7 @@ uint16_t Filesystem::InitNewFileSystem(const std::uint8_t diskNumber, const  kiv
 	return write_to_disk(diskNumber, 0, 6, buffer);
 }
 
-uint16_t Filesystem::GetFilesystemDescription(const std::uint8_t diskNumber,const  kiv_hal::TDrive_Parameters parameters, Boot_record* bootRecord)
+uint16_t Filesystem::GetFilesystemDescription(const std::uint8_t diskNumber,const kiv_hal::TDrive_Parameters parameters, Boot_record & bootRecord)
 {
 	load_boot_record(diskNumber, parameters, bootRecord);
 	return is_valid_fat(bootRecord) ? FsError::SUCCESS : FsError::NO_FILE_SYSTEM;
@@ -42,7 +42,7 @@ uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  std::
 	}
 
 	// nacti BR
-	opRes = load_boot_record(diskNumber, parameters, &fatBootRec);
+	opRes = load_boot_record(diskNumber, parameters, fatBootRec);
 	if (opRes != FsError::SUCCESS) {
 		return opRes;
 	}
@@ -111,7 +111,53 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 
 uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char * buffer, size_t bufferLen)
 {
-	// todo:
+	Boot_record fatBootRec;
+	uint16_t opRes = 0;
+	int dirCluster = 0;
+	std::vector<std::string> filePathItems;
+	Directory fileToWriteTo;
+	Directory parentDir;
+	int32_t* fatTable = NULL;
+	kiv_hal::TDrive_Parameters parameters;
+
+	// nacti parametry disku
+	opRes = LoadDiskParameters(diskNumber, parameters);
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
+
+	// nacti BR
+	opRes = load_boot_record(diskNumber, parameters, &fatBootRec);
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
+
+	// nacti FAT
+	fatTable = new int32_t[fatBootRec.usable_cluster_count];
+	opRes = load_fat(diskNumber, fatBootRec, fatTable);
+	if (opRes != FsError::SUCCESS) {
+		delete[] fatTable;
+		return opRes;
+	}
+
+	// najdi soubor
+	// rozdel fileName na jmena
+	Util::SplitPath(fileName, filePathItems);
+	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToWriteTo, parentDir);
+	if (opRes != FsError::SUCCESS) {
+		delete[] fatTable;
+		return opRes;
+	}
+
+	opRes = write_file(diskNumber, fatBootRec, fatTable, fileToWriteTo, offset, buffer, bufferLen);
+
+	delete[] fatTable;
+
+	return opRes;
+}
+
+uint16_t Filesystem::CreateDirectory(const std::uint8_t diskNumber, const std::string dirName)
+{
 	return FsError::UNKNOWN_ERROR;
 }
 
