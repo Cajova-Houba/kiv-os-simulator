@@ -362,7 +362,11 @@ std::string RTL::ErrorToString(RTL::Error error)
 		case RTL::Error::UNKNOWN_ERROR:         break;
 	}
 
-	return "Neznama chyba";
+	std::string unknown = "Neznama chyba (";
+	unknown += std::to_string(static_cast<uint16_t>(error));
+	unknown += ")";
+
+	return unknown;
 }
 
 
