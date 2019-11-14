@@ -6,7 +6,7 @@ int shell_main(const char *args)
 {
 	// TODO
 
-	const char *prompt = "C:\\> ";
+	const char *prompt = "C:\\>";
 	const char *intro  = "Vitejte v kostre semestralni prace z KIV/OS.\n"
 	                     "Shell zobrazuje echo zadaneho retezce. Prikaz exit ukonci shell.\n";
 
@@ -26,11 +26,9 @@ int shell_main(const char *args)
 
 		buffer[read] = '\0';
 
-		RTL::WriteStdOut("\n");
 		RTL::WriteStdOut(buffer);
-		RTL::WriteStdOut("\n");
 	}
-	while (strcmp(buffer, "exit") != 0);
+	while (strcmp(buffer, "exit\n") != 0);
 
 	return 0;
 }
