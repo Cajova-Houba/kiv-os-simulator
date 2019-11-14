@@ -79,7 +79,7 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters & context)
 
 		// inicializace/kontrola pritomnosti FS
 		Boot_record fsBootRec;
-		uint16_t status = Filesystem::GetFilesystemDescription(i, params, &fsBootRec);
+		uint16_t status = Filesystem::GetFilesystemDescription(i, params, fsBootRec);
 
 		if (FsError::NO_FILE_SYSTEM == status) {
 			PrintMsg("Nenalezen zadny filesystem.\n");

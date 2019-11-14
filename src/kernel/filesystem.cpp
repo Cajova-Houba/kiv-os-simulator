@@ -7,16 +7,7 @@
 
 uint16_t Filesystem::InitNewFileSystem(const std::uint8_t diskNumber, const  kiv_hal::TDrive_Parameters parameters)
 {
-	kiv_hal::TRegisters registers;
-	kiv_hal::TDisk_Address_Packet addressPacket;
-	// todo: velikost bufferu by mela byt rizena podle parametru
-	uint64_t bytesPerSector = parameters.bytes_per_sector;
-	char buffer[3072] = {0};		// 6 sektoru, to je minimum, 2888 B je potreba pro zapis struktury FAT
-
-	// vytvori boot rec pro FAT a samotnou FAT
-	init_fat(parameters, buffer);
-
-	return write_to_disk(diskNumber, 0, 6, buffer);
+	return init_fat(diskNumber, parameters);
 }
 
 uint16_t Filesystem::GetFilesystemDescription(const std::uint8_t diskNumber,const kiv_hal::TDrive_Parameters parameters, Boot_record & bootRecord)
@@ -77,7 +68,7 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 	}
 
 	// nacti BR
-	opRes = load_boot_record(diskNumber, parameters, &fatBootRec);
+	opRes = load_boot_record(diskNumber, parameters, fatBootRec);
 	if (opRes != FsError::SUCCESS) {
 		return opRes;
 	}
@@ -127,7 +118,7 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 	}
 
 	// nacti BR
-	opRes = load_boot_record(diskNumber, parameters, &fatBootRec);
+	opRes = load_boot_record(diskNumber, parameters, fatBootRec);
 	if (opRes != FsError::SUCCESS) {
 		return opRes;
 	}
@@ -158,7 +149,62 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 
 uint16_t Filesystem::CreateDirectory(const std::uint8_t diskNumber, const std::string dirName)
 {
-	return FsError::UNKNOWN_ERROR;
+	Boot_record fatBootRec;
+	uint16_t isError = 0;
+	int dirCluster = 0;
+	std::vector<std::string> filePathItems;
+	Directory newFile,
+				parentDir,
+				tmp;
+	int32_t* fatTable = NULL;
+	kiv_hal::TDrive_Parameters parameters;
+
+	// nacti parametry disku
+	isError = LoadDiskParameters(diskNumber, parameters);
+	if (isError) {
+		return isError;
+	}
+
+	// nacti BR
+	isError = load_boot_record(diskNumber, parameters, fatBootRec);
+	if (isError) {
+		return isError;
+	}
+
+	// nacti FAT
+	fatTable = new int32_t[fatBootRec.usable_cluster_count];
+	isError = load_fat(diskNumber, fatBootRec, fatTable);
+	if (isError) {
+		delete[] fatTable;
+		return isError;
+	}
+
+	// rozdel fileName na jmena
+	Util::SplitPath(dirName, filePathItems);
+	if (filePathItems.size() == 0) {
+		// nemuzeme znova vytvorit root
+		delete[] fatTable;
+		return FsError::UNKNOWN_ERROR;
+	}
+
+	// vyber posledni item z filePathItems a pouzij ho jako jmeno noveho souboru
+	memset(newFile.name, 0, MAX_NAME_LEN);
+	memcpy(newFile.name, filePathItems[filePathItems.size() - 1].c_str(), MAX_NAME_LEN - 1);
+	filePathItems.erase(filePathItems.end() - 1);
+
+	// najdi rodicovsky adresar
+	isError = find_file(diskNumber, fatBootRec, filePathItems, parentDir, tmp);
+	if (isError) {
+		delete[] fatTable;
+		isError;
+	}
+
+	// vytvor novy adresar
+	newFile.isFile = false;
+	isError = create_file(diskNumber, fatBootRec, fatTable, parentDir, newFile);
+	delete[] fatTable;
+
+	return isError;
 }
 
 uint16_t Filesystem::LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters)

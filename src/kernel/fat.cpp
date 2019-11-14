@@ -2,6 +2,81 @@
 #include <cstdlib>
 #include "fat.h"
 
+uint16_t init_fat(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters parameters)
+{
+	Boot_record new_record;
+	std::string volume_desc("KIV/OS volume.");
+	std::string signature("kiv-os");
+	int32_t fat_table[DEF_MIN_DATA_CL];
+	char *buffer;
+	size_t i = 0;
+	uint64_t sectorCount = 0;
+	uint16_t isError = 0;
+	// boot record + 2*FAT + data clusters
+	const uint64_t baseSize = ALIGNED_BOOT_REC_SIZE
+		+ DEF_FAT_COPIES * DEF_MIN_DATA_CL * sizeof(int32_t);
+	const uint64_t minReqSize = baseSize
+		+ DEF_MIN_DATA_CL * parameters.bytes_per_sector;
+
+	// muzeme vubec inicializovat na tomhle disku?
+	if (parameters.bytes_per_sector < MIN_REQ_SECOTR_SIZE) {
+		return FsError::INCOMPATIBLE_DISK;
+	}
+
+	// kontrola jestli je na disku misto na celou strukturu FAT
+	if (parameters.absolute_number_of_sectors * parameters.bytes_per_sector < minReqSize) {
+		return FsError::FULL_DISK;
+	}
+
+	fat_table[0] = ROOT_CLUSTER;
+	for (i = 1; i < DEF_MIN_DATA_CL; i++) {
+		fat_table[i] = FAT_UNUSED;
+	}
+
+	// vytvoreni bufferu zapsani boot sectoru a FAT
+	sectorCount = (uint64_t)ceil(baseSize / (float)parameters.bytes_per_sector);
+	buffer = new char[sectorCount * parameters.bytes_per_sector];
+
+	// prenaplneni popis 0, pak nakopirovani retezce
+	memset(new_record.volume_descriptor, 0x0, DESCRIPTION_LEN);
+	volume_desc.copy(new_record.volume_descriptor, volume_desc.length());
+
+	// to same pro podpis
+	memset(new_record.signature, 0x0, SIGNATURE_LEN);
+	signature.copy(new_record.signature, signature.length());
+
+	// FAT8
+	// 1 cluster = 1 secotr
+	new_record.fat_type = 8;
+	new_record.fat_copies = DEF_FAT_COPIES;
+	new_record.usable_cluster_count = DEF_MIN_DATA_CL;
+	new_record.cluster_size = 1;
+	new_record.bytes_per_sector = parameters.bytes_per_sector;
+
+	// boot sector
+	memcpy(buffer, &new_record, sizeof(Boot_record));
+
+	// fat a kopie
+	for (i = 0; i < new_record.fat_copies; i++) {
+		memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE + i* DEF_MIN_DATA_CL * sizeof(int32_t)]), &fat_table, sizeof(fat_table));
+	}
+
+	// zapis metadat FAT
+	isError = write_to_disk(diskNumber, 0, sectorCount, buffer);
+	delete[] buffer;
+	if (isError) {
+		return isError;
+	}
+
+	// zapis root clusteru, jen 0
+	buffer = new char[parameters.bytes_per_sector];
+	memset(buffer, 0, parameters.bytes_per_sector);
+	isError = write_to_disk(diskNumber, first_data_sector(new_record), 1, buffer);
+	delete[] buffer;
+
+	return isError;
+}
+
 uint16_t load_boot_record(const std::uint8_t diskNumber, const kiv_hal::TDrive_Parameters parameters, Boot_record & bootRecord)
 {
 	kiv_hal::TRegisters registers;
@@ -59,36 +134,6 @@ uint16_t load_fat(const std::uint8_t diskNumber, const Boot_record& bootRecord, 
 	return FsError::SUCCESS;
 }
 
-uint16_t load_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int cluster, Directory * dest)
-{
-	// od ktereho sektoru zacit cist? 
-	const int byteOffset = cluster_byte_offset(bootRecord, cluster);
-	const uint64_t startSector = byteOffset / bootRecord.bytes_per_sector;
-
-	// kolik sektoru nacist, aby obsahovaly vse co chci?
-	const int bytesToRead = sizeof(Directory);
-	const uint64_t sectorCount = sectors_to_read(startSector, byteOffset, bytesToRead, bootRecord.bytes_per_sector);
-	char* buffer = new char[sectorCount * bootRecord.bytes_per_sector];
-
-	// na kterem bytu v bufferu zacinaji relevantni data?
-	const uint64_t bufferOffset = byteOffset - startSector * bootRecord.bytes_per_sector;
-
-	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, buffer);
-	if (readRes != FsError::SUCCESS) {
-		// chyba pri cteni z disku
-		delete[] buffer;
-		return FsError::DISK_OPERATION_ERROR;
-	}
-
-	// zkopirovani adresare do dest
-	memcpy(dest, &(buffer[bufferOffset]), bytesToRead);
-
-	// uklid 
-	delete[] buffer;
-
-	return FsError::SUCCESS;
-}
-
 uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest)
 {
 	// kontrola, ze je vazne potreba cokoliv delat
@@ -99,7 +144,7 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bo
 	int i = 0;
 
 	// nactu 1 cluster s adresarem
-	const int itemsInDirectory = max_items_in_directory(bootRecord);
+	const size_t itemsInDirectory = max_items_in_directory(bootRecord);
 	size_t bufferLen = bootRecord.bytes_per_sector * bootRecord.cluster_size;
 	char* buffer = new char[bufferLen];
 	Directory* dirItems = new Directory[itemsInDirectory];
@@ -138,7 +183,7 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 		return FsError::NOT_A_FILE;
 	}
 
-    const size_t bytesPerCluster = bootRecord.cluster_size * bootRecord.bytes_per_sector;
+    const size_t bytesPerCluster = bytes_per_cluster(bootRecord);
 
 	uint16_t res = FsError::UNKNOWN_ERROR,
 			readRes = FsError::UNKNOWN_ERROR;
@@ -186,17 +231,19 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 
 uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & fileToWriteTo, size_t offset, char * buffer, size_t bufferLen)
 {
+	// todo:
 	if (!fileToWriteTo.isFile) {
 		return FsError::NOT_A_FILE;
 	}
 
+	//const size_t bytesPerCluster = bytes_per_cluster(bootRecord);
 	uint16_t res = FsError::UNKNOWN_ERROR,
 		isReadError = FsError::UNKNOWN_ERROR;
 	size_t bytesToWrite = bufferLen;
 	char* clusterBuffer = new char[bootRecord.cluster_size];
 	
 	// od ktere casti ktereho clusteru se bude zapisovat?
-	int32_t startCluster = offset / bootRecord.cluster_size;
+	int32_t startCluster = (int32_t) offset / bootRecord.cluster_size;
 	size_t clusterOffset = offset - startCluster * bootRecord.cluster_size;
 
 	// pokud je offset vetsi nez velikost souboru, kolik nul
@@ -228,7 +275,7 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 		fillBytesToWrite -= currBytesToWrite;
 
 		// kolik dalsich clusteru bude potreba naalokovat?
-		fillClusterCount = ceil(fillBytesToWrite / (float)bootRecord.cluster_size);
+		fillClusterCount = (size_t) ceil(fillBytesToWrite / (float)bootRecord.cluster_size);
 		for (i = 0; i < fillClusterCount; i++) {
 			lastCluster = get_free_cluster(fatTable, bootRecord.usable_cluster_count);
 			if (lastCluster == NO_CLUSTER) {
@@ -240,50 +287,63 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 		}
 	}
 
-
-	//// po jednom nacitej clustery z disku
-	//while (currentCluster != FAT_FILE_END && !bufferFull) {
-	//	// cteni po clusterech 
-	//	byteOffset = cluster_byte_offset(bootRecord, currentCluster);
-	//	startSector = byteOffset / bootRecord.bytes_per_sector;
-	//	sectorCount = sectors_to_read(startSector, byteOffset, bootRecord.cluster_size, bootRecord.bytes_per_sector);
-	//	bufferOffset = byteOffset - startSector * bootRecord.bytes_per_sector;
-	//	sectorBuffer = new char[sectorCount * bootRecord.bytes_per_sector];
-
-	//	// nacti sektory obsahujici 1 cluster do sectorBufferu
-	//	readRes = read_from_disk(diskNumber, startSector, sectorCount, sectorBuffer);
-	//	if (readRes != FsError::SUCCESS) {
-	//		// chyba pri cteni z disku
-	//		res = FsError::DISK_OPERATION_ERROR;
-	//		delete[] sectorBuffer;
-	//		break;
-	//	}
-
-	//	// ze sectorBufferu nacti cluster do bufferu
-	//	// pokud uz je cilovy buffer plny a cely cluster se do nej nevejde,
-	//	// nacti jen to co muzes
-	//	if (totalBytes + bootRecord.cluster_size > bufferLen) {
-	//		currBytesToRead = bufferLen - (totalBytes);
-	//		bufferFull = true;
-	//	}
-	//	memcpy(&(buffer[totalBytes]), &(sectorBuffer[bufferOffset]), currBytesToRead);
-	//	totalBytes += currBytesToRead;
-	//	// todo: text v testovacim prakladu ma na konci kazdeho sektoru byte '\0' coz znamena
-	//	// ze i kdyz se cely text ze souboru nacte (ze vsech clusteru), je vypsana pouze prvni
-	//	// cast (protoze pak je '\0' a az pak je dalsi cast).
-	//	buffer[totalBytes - 1] = ' ';
-
-	//	// prejdi na dalsi cluster
-	//	currentCluster = fatTable[currentCluster];
-	//	delete[] sectorBuffer;
-	//}
-
-	//// uspesne jme vse precetli
-	//if (currentCluster == FAT_FILE_END || bufferFull) {
-	//	res = FsError::SUCCESS;
-	//}
-
 	return res;
+}
+
+uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, const Directory parentDirectory, Directory & newFile)
+{
+	const size_t maxItemsInDir = max_items_in_directory(bootRecord);
+	const size_t bytesPerCluster = bytes_per_cluster(bootRecord);
+
+	bool parentDirFull = false,
+		fatFull = false;
+	int16_t isError;
+	std::vector<Directory> itemsInParentDir;
+	int32_t nextFreeCluster = 0;
+	char *dirBuffer;
+	int dirPosition = 0;
+
+	// zjistit jestli je misto ve FAT
+	nextFreeCluster = get_free_cluster(fatTable, bootRecord.usable_cluster_count);
+	if (nextFreeCluster == NO_CLUSTER) {
+		return FsError::FULL_DISK;
+	}
+
+	// vytvorit soubor
+	newFile.start_cluster = nextFreeCluster;
+	if (newFile.isFile) {
+		newFile.size = (uint32_t) bytesPerCluster;
+	}
+	else {
+		newFile.size = 0;
+	}
+	
+	// buffer na adresar veliksoti 1 clusteru
+	dirBuffer = new char[newFile.size];
+	isError = read_cluster_range(diskNumber, bootRecord, parentDirectory.start_cluster, 1, dirBuffer, bytesPerCluster);
+	if (isError) {
+		delete[] dirBuffer;
+		return isError;
+	}
+
+	// zjistit jestli je misto v adresari
+	dirPosition = get_free_dir_item_in_cluster(dirBuffer, maxItemsInDir);
+	if (dirPosition < 0) {
+		delete[] dirBuffer;
+		return FsError::FULL_DIR;
+	}
+
+	// vlozit novy soubor do clusteru a zapsat novy cluster pro soubor
+	memcpy(&(dirBuffer[dirPosition * sizeof(Directory)]), &newFile, sizeof(Directory));
+	write_cluster_range(diskNumber, bootRecord, parentDirectory.start_cluster, 1, dirBuffer);
+
+	memset(dirBuffer, 0, bytesPerCluster);
+	write_cluster_range(diskNumber, bootRecord, newFile.start_cluster, 1, dirBuffer);
+	delete[] dirBuffer;
+
+	// update FAT
+	fatTable[nextFreeCluster] = FAT_FILE_END;
+	return update_fat(diskNumber, bootRecord, fatTable);
 }
 
 int get_free_cluster(const int32_t *fat, const int fat_size) {
@@ -305,7 +365,7 @@ int get_data_position(Boot_record *boot_record) {
 	return sizeof(Boot_record) + sizeof(int32_t)*boot_record->usable_cluster_count*boot_record->fat_copies;
 }
 
-int get_free_directory_in_cluster(FILE *file, Boot_record *boot_record, int32_t *fat, int cluster) {
+int get_free_directory_in_cluster_old(FILE *file, Boot_record *boot_record, int32_t *fat, int cluster) {
 	int status = 0;
 	int size = 0;
 	int items_read = 0;
@@ -467,23 +527,34 @@ int get_file_position(FILE *file, Boot_record *boot_record, int parent_dir_clust
     return res;
 }
 
-int update_fat(FILE *file, Boot_record *boot_record, int32_t *fat) {
-    int fat_position = sizeof(Boot_record);
-    int tmp = 0;
-    int i = 0;
+uint16_t update_fat(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t *fat) {
+	// zapiseme br, fat i jeji kopie najednou
+	// pokud to bude mnoc pameti, 
+	// muzeme zmenit na postupne zapisovani (treba po 1 kb)
+	const size_t fatLen = bootRecord.usable_cluster_count;
+	const size_t bytesToWrite = sizeof(bootRecord) + bootRecord.usable_cluster_count*bootRecord.fat_copies * fatLen;
+	const uint64_t sectorCount = first_data_sector(bootRecord);
+	char *buffer = new char[sectorCount * bootRecord.bytes_per_sector];
+	size_t i = 0,
+		bufferPointer = 0;
+	uint16_t isError = 0;
 
-    tmp = fseek(file, fat_position, SEEK_SET);
-    if(tmp < 0) {
-        return NOK;
-    }
-    for(i = 0; i < boot_record->fat_copies; i++) {
-        tmp = (int)fwrite(fat, sizeof(int32_t), (size_t )boot_record->usable_cluster_count, file);
-        if(tmp < 0) {
-            return NOK;
-        }
-    }
+	// prednaplnime buffer 0, aby tam nebylo nic divnyho
+	memset(buffer, 0, sizeof(buffer));
 
-    return OK;
+	// boot record
+	memcpy(buffer, &bootRecord, sizeof(Boot_record));
+	bufferPointer += sizeof(Boot_record);
+
+	// fat and copies
+	for (i = 0; i < bootRecord.fat_copies; i++) {
+		bufferPointer += i * fatLen * sizeof(int32_t);
+		memcpy(&(buffer[bufferPointer]), fat, fatLen);
+	}
+
+	isError = write_to_disk(diskNumber, 0, sectorCount, buffer);
+	delete[] buffer;
+	return isError;
 }
 
 int find_in_dir(FILE *file, Boot_record *boot_record, char *filename, int directory_cluster, bool is_file) {
@@ -519,6 +590,24 @@ int unused_cluster_count(int32_t *fat, int fat_length) {
     return count;
 }
 
+int get_free_dir_item_in_cluster(char * clusterBuffer, size_t dirItemCount)
+{
+	Directory *dirItems = new Directory[dirItemCount];
+	size_t i = 0;
+	int res = -1;
+
+	memcpy(dirItems, clusterBuffer, sizeof(Directory) * dirItemCount);
+	for (i = 0; i < dirItemCount; i++) {
+		if (dirItems[i].name[0] == '\0') {
+			res = (int)i;
+			break;
+		}
+	}
+
+	delete[] dirItems;
+	return res;
+}
+
 int is_item_in_dir(const std::string itemName, const std::vector<Directory>& items)
 {
 	for (size_t i = 0; i < items.size(); i++)
@@ -538,7 +627,6 @@ void copy_dir(Directory & dest, const Directory & source)
 
 uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char* buffer, const size_t bufferLen)
 {
-	uint64_t byteOffset = cluster_byte_offset(bootRecord, cluster);
 	uint64_t startSector = first_data_sector(bootRecord) + cluster * bootRecord.cluster_size;
 	uint64_t sectorCount = clusterCount * bootRecord.cluster_size;
 	size_t bytesToRead = sectorCount * bootRecord.bytes_per_sector;
@@ -560,6 +648,14 @@ uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & b
 	}
 	memcpy(buffer, sectorBuffer, bytesToRead);
 	return FsError::SUCCESS;
+}
+
+uint16_t write_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char * buffer)
+{
+	uint64_t startSector = first_data_sector(bootRecord) + cluster * bootRecord.cluster_size;
+	uint64_t sectorCount = clusterCount * bootRecord.cluster_size;
+
+	return write_to_disk(diskNumber, startSector, sectorCount, buffer);
 }
 
 uint16_t read_from_disk(const std::uint8_t diskNumber, const uint64_t startSector, const uint64_t sectorCount, char * buffer)
@@ -606,58 +702,14 @@ uint16_t write_to_disk(const std::uint8_t diskNumber, const uint64_t startSector
 	return FsError::SUCCESS;
 }
 
+uint64_t first_data_sector(const Boot_record & bootRecord)
+{
+	return (uint64_t)ceil((ALIGNED_BOOT_REC_SIZE
+		+ sizeof(int32_t) * bootRecord.usable_cluster_count * bootRecord.fat_copies)
+		/ (float)bootRecord.bytes_per_sector);
+}
+
 bool is_valid_fat(Boot_record & bootRecord)
 {
 	return bootRecord.usable_cluster_count > 0;
-}
-
-uint16_t init_fat(const kiv_hal::TDrive_Parameters parameters, char* buffer) {
-    Boot_record new_record;
-    std::string volume_desc("KIV/OS volume.");
-    std::string signature("kiv-os");
-    int32_t fat_table[DEF_MIN_DATA_CL];
-    int i = 0;
-
-	// boot record + 2*FAT + data clusters
-	uint64_t minReqSize = ALIGNED_BOOT_REC_SIZE 
-		+ DEF_FAT_COPIES * DEF_MIN_DATA_CL * sizeof(int32_t)
-		+ DEF_MIN_DATA_CL * parameters.bytes_per_sector;
-
-	// kontrola jestli je na disku misto na celou strukturu FAT
-	if (parameters.absolute_number_of_sectors * parameters.bytes_per_sector < minReqSize) {
-		return FsError::FULL_DISK;
-	}
-
-    fat_table[0] = ROOT_CLUSTER;
-    for(i = 1; i < DEF_MIN_DATA_CL; i++) {
-        fat_table[i] = FAT_UNUSED;
-    }
-
-    // fill the descriptor with 0s
-    // then copy the actual description
-    memset(new_record.volume_descriptor, 0x0, DESCRIPTION_LEN);
-    volume_desc.copy(new_record.volume_descriptor, volume_desc.length());
-
-    // do the same for the signature
-    memset(new_record.signature, 0x0, SIGNATURE_LEN);
-    signature.copy(new_record.signature, signature.length());
-
-    // FAT8
-    // 1 cluster = 1 secotr
-    new_record.fat_type = 8;
-    new_record.fat_copies = DEF_FAT_COPIES;
-    new_record.usable_cluster_count = DEF_MIN_DATA_CL;
-	new_record.cluster_size = 1;
-	new_record.bytes_per_sector = parameters.bytes_per_sector;
-
-	// boot sector
-	memcpy(buffer, &new_record, sizeof(Boot_record));
-
-    // fat table
-	memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE]), &fat_table, sizeof(fat_table));
-
-    // fat table copy
-	memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE + DEF_MIN_DATA_CL * sizeof(int32_t)]), &fat_table, sizeof(fat_table));
-
-    return FsError::SUCCESS;
 }

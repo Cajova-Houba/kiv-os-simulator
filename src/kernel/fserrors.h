@@ -9,6 +9,8 @@ enum FsError : uint16_t {
 	NOT_A_FILE,
 	FILE_NOT_FOUND,
 	FULL_DISK,
+	FULL_DIR,
+	INCOMPATIBLE_DISK,			// pokud se pokousime initializovat FS na divnem disku (napr velikost sektoru 1b)
 
 	UNKNOWN_ERROR = 0xFFFF
 };
