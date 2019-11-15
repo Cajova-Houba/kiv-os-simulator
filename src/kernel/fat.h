@@ -103,7 +103,7 @@ constexpr int32_t find_last_file_cluster(const int32_t * fat, const int32_t star
 {
 	int32_t lastCluster = startCluster;
 
-	while (fat[lastCluster] != FAT_FILE_END || fat[lastCluster] != FAT_DIRECTORY) {
+	while (fat[lastCluster] != FAT_FILE_END && fat[lastCluster] != FAT_DIRECTORY) {
 		lastCluster = fat[lastCluster];
 	}
 	return lastCluster;
@@ -111,6 +111,17 @@ constexpr int32_t find_last_file_cluster(const int32_t * fat, const int32_t star
 
 constexpr size_t bytes_per_cluster(const Boot_record& bootRecord) {
 	return bootRecord.bytes_per_sector * bootRecord.cluster_size;
+}
+
+constexpr size_t count_file_clusters(const int32_t* fat, const int32_t startCluster) {
+	size_t cnt = 1;
+	int32_t cl = startCluster;
+	while (fat[cl] != FAT_FILE_END && fat[cl] != FAT_DIRECTORY) {
+		cnt++;
+		cl = fat[cl];
+	}
+
+	return cnt;
 }
 
 /**
@@ -212,7 +223,7 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
  * @return
  *	FsError::SUCCESS uspesne zapsano do souboru.
  */
-uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, const Directory & fileToWriteTo, const size_t offset, char* buffer, size_t bufferLen);
+uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, Directory & fileToWriteTo, const size_t offset, char* buffer, size_t bufferLen);
 
 /**
  * @biref Alokuje zadany pocet clusteru ve FAT od zadaneho poledniho clusteru.
@@ -235,7 +246,16 @@ uint16_t append_zero_to_file(const std::uint8_t diskNumber, const Boot_record & 
  * @return
  *	FsError::SUCCESS soubor vytvoren, newFile ma nastaveny start_cluster a size.
  */
-uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, const Directory parentDirectory, Directory & newFile);
+uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, const Directory & parentDirectory, Directory & newFile);
+
+/**
+ * @brief Prehraje zadanou polozku (fileToUpdate) v zadanem adresari (parentDirectory).
+ *
+ * @return
+ *	FsError::SUCCESS pokud vse v poradku
+ *	FsError::FILE_NOT_FOUND pokud nebyl fileToUpdate nalezen v rodicovskem adresari.
+ */
+uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & parentDirectory, const Directory & fileToUpdate);
 
 /**
  * Returns the first unused cluster found or NO_CLUSTER.
@@ -255,6 +275,9 @@ int get_data_position(Boot_record *boot_record);
  *		  Pokud je filePath prazdna, foundFile.start_cluster je nastaven na ROOT_CLUSTER a foundFile.isFile je nastaven na false.
  * 
  * @param filePath Absolutni cesta obsahujici jmena jednotlivych adresaru. Posledni prvek je jmeno hledaneho souboru.
+ * @param foundFile Reference na strukturu ktera bude naplnena nalezenym souborem.
+ * @param parentDirectory Reference na strukturu ktera bude naplnena poslednim nalezenym adresarem z cesty. Tj v pripade nalezeni souboru bude obsahovat jeho rodicovksy adresar.
+ *		V pripade, ze filePath.size() > 0, bude obsahovat minimalne root adresar.
  *
  * @return
  *	FsError::SUCCESS pokud byl soubor nalezen.

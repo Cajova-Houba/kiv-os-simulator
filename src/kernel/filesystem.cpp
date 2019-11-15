@@ -144,18 +144,52 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 
 	delete[] fatTable;
 
+	// update zaznamu souboru v parent adresari
+	opRes = update_file_in_dir(diskNumber, fatBootRec, parentDir, fileToWriteTo);
+
 	return opRes;
 }
 
 uint16_t Filesystem::CreateDirectory(const std::uint8_t diskNumber, const std::string dirName)
 {
+	return _CreateFileInternal(diskNumber, dirName, false);
+}
+
+uint16_t Filesystem::CreateFile(const std::uint8_t diskNumber, const std::string fileName)
+{
+	return _CreateFileInternal(diskNumber, fileName, true);
+}
+
+uint16_t Filesystem::DeleteFile(const std::uint8_t diskNumber, const std::string fileName)
+{
+	// todo:
+	return uint16_t();
+}
+
+uint16_t Filesystem::LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters)
+{
+	kiv_hal::TRegisters registers;
+	registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Drive_Parameters);
+	registers.rdi.r = reinterpret_cast<uint64_t>(&parameters);
+	registers.rdx.l = diskNumber;
+	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, registers);
+
+	if (registers.flags.carry)
+	{
+		FsError::DISK_OPERATION_ERROR;
+	}
+	return FsError::SUCCESS;
+}
+
+
+uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::string dirName, const bool isFile) {
 	Boot_record fatBootRec;
 	uint16_t isError = 0;
 	int dirCluster = 0;
 	std::vector<std::string> filePathItems;
 	Directory newFile,
-				parentDir,
-				tmp;
+		parentDir,
+		tmp;
 	int32_t* fatTable = NULL;
 	kiv_hal::TDrive_Parameters parameters;
 
@@ -196,36 +230,14 @@ uint16_t Filesystem::CreateDirectory(const std::uint8_t diskNumber, const std::s
 	isError = find_file(diskNumber, fatBootRec, filePathItems, parentDir, tmp);
 	if (isError) {
 		delete[] fatTable;
-		isError;
+		return isError;
 	}
 
-	// vytvor novy adresar
-	newFile.isFile = false;
+	// adresar/soubor
+	newFile.isFile = isFile;
 	isError = create_file(diskNumber, fatBootRec, fatTable, parentDir, newFile);
 	delete[] fatTable;
 
 	return isError;
 }
-
-uint16_t Filesystem::DeleteFile(const std::uint8_t diskNumber, const std::string fileName)
-{
-	// todo:
-	return uint16_t();
-}
-
-uint16_t Filesystem::LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters)
-{
-	kiv_hal::TRegisters registers;
-	registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Drive_Parameters);
-	registers.rdi.r = reinterpret_cast<uint64_t>(&parameters);
-	registers.rdx.l = diskNumber;
-	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Disk_IO, registers);
-
-	if (registers.flags.carry)
-	{
-		FsError::DISK_OPERATION_ERROR;
-	}
-	return FsError::SUCCESS;
-}
-
 

@@ -83,6 +83,17 @@ namespace Filesystem {
 	uint16_t CreateDirectory(const std::uint8_t diskNumber, const std::string dirName);
 
 	/**
+	 * @brief Vytvori zadany soubor.
+	 *
+	 * @param fileName Absolutni cesta k souboru.
+	 *
+	 * @return 
+	 *	FsError::SUCCESS adresar vytvoren
+	 *	FsError::FILE_NOT_FOUND rodicovsky adresar nenalezen
+	 */
+	uint16_t CreateFile(const std::uint8_t diskNumber, const std::string fileName);
+
+	/**
 	 * @brief Smaze zadany soubor. Pouze odstrani polozku v adresari a smaze zaznamy ve FAT, data na disku zustavaji nezmenena.
 	 * 
 	 * @param diskNumber Cislo disku ze ktereho se bude mazat.
@@ -100,4 +111,6 @@ namespace Filesystem {
 	 *	FsError::SUCCESS pokud byly parametry nacteny.
 	 */
 	uint16_t LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters);
+
+	uint16_t _CreateFileInternal(std::uint8_t diskNumber, const std::string dirName, const bool isFile);
 }

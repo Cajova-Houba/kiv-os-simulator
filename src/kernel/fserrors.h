@@ -11,6 +11,7 @@ enum FsError : uint16_t {
 	FULL_DISK,
 	FULL_DIR,
 	INCOMPATIBLE_DISK,			// pokud se pokousime initializovat FS na divnem disku (napr velikost sektoru 1b)
+	FILE_ALREADY_EXISTS,		// pokousime se vytvorit soubor ktery uz existuje
 
 	UNKNOWN_ERROR = 0xFFFF
 };

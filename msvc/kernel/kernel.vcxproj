@@ -44,6 +44,7 @@
     <ClInclude Include="..\..\src\kernel\event_system.h" />
     <ClInclude Include="..\..\src\kernel\fat.h" />
     <ClInclude Include="..\..\src\kernel\filesystem.h" />
+    <ClInclude Include="..\..\src\kernel\fserrors.h" />
     <ClInclude Include="..\..\src\kernel\handle.h" />
     <ClInclude Include="..\..\src\kernel\handle_reference.h" />
     <ClInclude Include="..\..\src\kernel\handle_storage.h" />
@@ -150,6 +151,9 @@
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
     </Link>
+    <PostBuildEvent>
+      <Command>copy /b/y d:\users\zdenda\prg\skola\os\testdata\drive_d_empty_initialized.bin d:\users\zdenda\prg\skola\os\msvc\kernel\drive_d.bin</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
