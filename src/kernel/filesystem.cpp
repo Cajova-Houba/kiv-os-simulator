@@ -25,6 +25,7 @@ uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  std::
 	Directory dir;
 	Directory parentDir;
 	kiv_hal::TDrive_Parameters parameters;
+	uint32_t matchCounter;
 
 	// nacti parametry disku
 	opRes = LoadDiskParameters(diskNumber, parameters);
@@ -40,7 +41,7 @@ uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  std::
 
 	// rozdel fileName na jmena
 	Util::SplitPath(fileName, filePathItems);
-	opRes = find_file(diskNumber, fatBootRec, filePathItems, dir, parentDir);
+	opRes = find_file(diskNumber, fatBootRec, filePathItems, dir, parentDir, matchCounter);
 	if (opRes != FsError::SUCCESS) {
 		return opRes;
 	}
@@ -60,6 +61,7 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 	Directory parentDir;
 	int32_t* fatTable = NULL;
 	kiv_hal::TDrive_Parameters parameters;
+	uint32_t matchCounter;
 
 	// nacti parametry disku
 	opRes = LoadDiskParameters(diskNumber, parameters);
@@ -85,7 +87,7 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 	Util::SplitPath(fileName, filePathItems);
 
 	// najdi soubor
-	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToRead, parentDir);
+	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToRead, parentDir, matchCounter);
 	if (opRes != FsError::SUCCESS) {
 		delete[] fatTable;
 		return opRes;
@@ -110,6 +112,7 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 	Directory parentDir;
 	int32_t* fatTable = NULL;
 	kiv_hal::TDrive_Parameters parameters;
+	uint32_t matchCounter;
 
 	// nacti parametry disku
 	opRes = LoadDiskParameters(diskNumber, parameters);
@@ -134,7 +137,7 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 	// najdi soubor
 	// rozdel fileName na jmena
 	Util::SplitPath(fileName, filePathItems);
-	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToWriteTo, parentDir);
+	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToWriteTo, parentDir, matchCounter);
 	if (opRes != FsError::SUCCESS) {
 		delete[] fatTable;
 		return opRes;
@@ -192,6 +195,7 @@ uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::str
 		tmp;
 	int32_t* fatTable = NULL;
 	kiv_hal::TDrive_Parameters parameters;
+	uint32_t matchCounter;
 
 	// nacti parametry disku
 	isError = LoadDiskParameters(diskNumber, parameters);
@@ -221,14 +225,21 @@ uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::str
 		return FsError::UNKNOWN_ERROR;
 	}
 
-	// vyber posledni item z filePathItems a pouzij ho jako jmeno noveho souboru
+	// posledni item z filePathItems a pouzij ho jako jmeno noveho souboru
 	memset(newFile.name, 0, MAX_NAME_LEN);
 	memcpy(newFile.name, filePathItems[filePathItems.size() - 1].c_str(), MAX_NAME_LEN - 1);
-	filePathItems.erase(filePathItems.end() - 1);
 
-	// najdi rodicovsky adresar
-	isError = find_file(diskNumber, fatBootRec, filePathItems, parentDir, tmp);
-	if (isError) {
+	// najdi soubor a jeho rodicovksy adresar
+	// pokud metoda vrati FILE_NOT_FOUND a matchCounter bude roven filePathItems.size() - 1
+	// vime ze rodicovsky adresar byl nalezen a lze v nem vytvori cilovy soubor
+	// pokud metoda vrati SUCCESS, vime ze cilovy soubor jiz existuje a je treba vratit chybu
+	isError = find_file(diskNumber, fatBootRec, filePathItems, tmp, parentDir, matchCounter);
+	if (isError == FsError::SUCCESS) {
+		delete[] fatTable;
+		return FsError::FILE_ALREADY_EXISTS;
+	} else if (isError == FsError::FILE_NOT_FOUND &&
+		(matchCounter != filePathItems.size() - 1)) {
+		// soubor nenalezen a match counter ma spatnou hodnotu -> chybi cast zadane cesty
 		delete[] fatTable;
 		return isError;
 	}

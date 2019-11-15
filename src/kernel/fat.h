@@ -223,7 +223,7 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
  * @return
  *	FsError::SUCCESS uspesne zapsano do souboru.
  */
-uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, Directory & fileToWriteTo, const size_t offset, char* buffer, size_t bufferLen);
+uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, Directory & fileToWriteTo, const size_t offset, char* buffer, const size_t bufferLen);
 
 /**
  * @biref Alokuje zadany pocet clusteru ve FAT od zadaneho poledniho clusteru.
@@ -278,6 +278,8 @@ int get_data_position(Boot_record *boot_record);
  * @param foundFile Reference na strukturu ktera bude naplnena nalezenym souborem.
  * @param parentDirectory Reference na strukturu ktera bude naplnena poslednim nalezenym adresarem z cesty. Tj v pripade nalezeni souboru bude obsahovat jeho rodicovksy adresar.
  *		V pripade, ze filePath.size() > 0, bude obsahovat minimalne root adresar.
+ * @param matchCounter Pocitadlo nalezenych itemu. V pripade, ze byl nalezen cilovy soubor, bude rovne poctu itemu v ceste. Pokud byl nalezen jen rodicovsky adresar 
+ *		ciloveho souboru, bude rovne poctu itemu v ceste - 1 ...
  *
  * @return
  *	FsError::SUCCESS pokud byl soubor nalezen.
@@ -286,7 +288,7 @@ int get_data_position(Boot_record *boot_record);
  */
 uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord,
 	const std::vector<std::string> & filePath,
-	Directory & foundFile, Directory & parentDirectory);
+	Directory & foundFile, Directory & parentDirectory, uint32_t & matchCounter);
 
 /**
  * Will read the cluster and determines if it's bad - starts and ends with FFFFFF.
