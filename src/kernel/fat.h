@@ -99,8 +99,34 @@ typedef struct {
 } Directory;
 
 
+constexpr int32_t find_last_file_cluster(const int32_t * fat, const int32_t startCluster)
+{
+	int32_t lastCluster = startCluster;
+
+	while (fat[lastCluster] != FAT_FILE_END || fat[lastCluster] != FAT_DIRECTORY) {
+		lastCluster = fat[lastCluster];
+	}
+	return lastCluster;
+}
+
 constexpr size_t bytes_per_cluster(const Boot_record& bootRecord) {
 	return bootRecord.bytes_per_sector * bootRecord.cluster_size;
+}
+
+/**
+ * @brief Vrati pocet volnych clusteru ve FAT.
+ */
+constexpr size_t count_free_clusters(const int32_t *fat, const size_t fatLen) {
+	size_t count = 0,
+		i = 0;
+	for (i = 0; i < fatLen; i++)
+	{
+		if (fat[i] == FAT_UNUSED) {
+			count++;
+		}
+	}
+
+	return count;
 }
 
 /**
@@ -186,7 +212,22 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
  * @return
  *	FsError::SUCCESS uspesne zapsano do souboru.
  */
-uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToWriteTo, size_t offset, char* buffer, size_t bufferLen);
+uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, const Directory & fileToWriteTo, const size_t offset, char* buffer, size_t bufferLen);
+
+/**
+ * @biref Alokuje zadany pocet clusteru ve FAT od zadaneho poledniho clusteru.
+ * Tato funkce na nic nezapisuje, pouze modifikuje zadanou FAT.
+ */
+uint16_t allocate_clusters(const Boot_record & bootRecord, int32_t* fatTable, const int32_t lastCluster, const size_t clusterCount);
+
+/**
+ * @brief Prida na konec souboru dany pocet nul.
+ * 
+ * Kontrola, jestli je dost mista pocita s poctem clusteru k zapisu jako ceil(zeroCount / bytes_per_sector) coz muze teoreticky zpusobit, ze funkce vrati
+ * DISK_FULL protoze nepocita s pripadnym mistem 
+ *
+ */
+uint16_t append_zero_to_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, const int32_t lastSector, const size_t zeroCount);
 
 /**
  * @brief Vytvori novy soubor v danem rodicovskem adresari
@@ -207,28 +248,6 @@ int get_free_cluster(const int32_t *fat, const int fat_size);
  * This position is computed as boot_record_size + fat_size*fat_copies
  */
 int get_data_position(Boot_record *boot_record);
-
-/**
- * Returns the position of 'filename' (not the whole path, just the name) in the parent_dir.
- * This position can then be multiplied by sizeof(Directory) to get the offset from the start of
- * the cluster.
- *
- * @return
- * NOK: file not found.
- * position: file found.
- */
-int get_file_position(FILE *file, Boot_record *boot_record, int parent_dir_cluster, char *filename);
-
-/**
- * Will iterate through items in cluster and returns the position of the first free directory found.
- * The position is relative to the start of the cluster.
- *
- * @return
- * position: position is found
- * NOK: no free position is found.
- * ERR_READING_FILE: error occurs
- */
-int get_free_directory_in_cluster_old(FILE *file, Boot_record *boot_record, int32_t *fat, int cluster);
 
 /**
  * @brief Pokusi se najit soubor podle zadane filePath. Pokud je sobor nalezen, je ulozen do foundFile a jeho rodicovsky adresar do parentDirectory.
@@ -262,13 +281,6 @@ int is_cluster_bad(char *cluster, int cluster_size);
 uint16_t update_fat(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t *fat);
 
 /**
- * Searches dir for filename.
- *
- * @return OK: filename found. NOK: filename not found.
- */
-int find_in_dir(FILE *file, Boot_record *boot_record, char *filename, int directory_cluster, bool is_file);
-
-/**
  * Returns the number of clusters marked as UNUSED.
  *
  * @param fat Pointer to the array with FAT.
@@ -281,6 +293,11 @@ int unused_cluster_count(int32_t *fat, int fat_length);
 /**************************
 	POMOCNE FUNKCE
 ****************************/
+
+/**
+ * @brief Vrati cislo clusteru ve kterem se nachazi dany offset
+ */
+int32_t get_cluster_by_offset(const int32_t* fatTable, const int32_t startCluster, const size_t offset, const size_t clusterSize);
 
 /**
  * @brief Vrati prvni neobsazenou Directory polozku v clusteru adresare.

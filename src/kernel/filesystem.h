@@ -83,6 +83,14 @@ namespace Filesystem {
 	uint16_t CreateDirectory(const std::uint8_t diskNumber, const std::string dirName);
 
 	/**
+	 * @brief Smaze zadany soubor. Pouze odstrani polozku v adresari a smaze zaznamy ve FAT, data na disku zustavaji nezmenena.
+	 * 
+	 * @param diskNumber Cislo disku ze ktereho se bude mazat.
+	 * @param fileName Absolutni cesta k souboru, ktery ma byt smazan.
+	 */
+	uint16_t DeleteFile(const std::uint8_t diskNumber, const std::string fileName);
+
+	/**
 	 * @brief Nacte parametry daneho disku.
 	 *
 	 * @param diskNumber Cislo disku jehoz parametry nacist.

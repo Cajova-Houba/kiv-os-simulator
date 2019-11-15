@@ -207,6 +207,12 @@ uint16_t Filesystem::CreateDirectory(const std::uint8_t diskNumber, const std::s
 	return isError;
 }
 
+uint16_t Filesystem::DeleteFile(const std::uint8_t diskNumber, const std::string fileName)
+{
+	// todo:
+	return uint16_t();
+}
+
 uint16_t Filesystem::LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters)
 {
 	kiv_hal::TRegisters registers;
