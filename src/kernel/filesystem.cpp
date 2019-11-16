@@ -51,7 +51,7 @@ uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  std::
 	return opRes;
 }
 
-uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char * buffer, const size_t bufferLen)
+uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char * buffer, const size_t bufferLen, const size_t offset)
 {
 	Boot_record fatBootRec;
 	uint16_t opRes = 0;
@@ -97,7 +97,7 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 	return opRes;
 }
 
-uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char * buffer, const size_t bufferLen)
+uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, char* buffer, const size_t bufferLen, const size_t offset)
 {
 	Boot_record fatBootRec;
 	uint16_t opRes = 0;

@@ -251,7 +251,7 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 		bytesToWrite = 0,
 		clusterOffset = 0;
 	int32_t currCluster = 0;
-	char* clusterBuffer = nullptr;
+	std::vector<char> clusterBuffer(clusterSize, 0);
 
 	// misto ktere uz je pro soubor alokovane
 	const size_t allocatedSize = fileClusterCount * clusterSize;
@@ -279,18 +279,24 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 		return isError;
 	}
 
+	// od ktereho clsuteru budeme zapisovat
+	if (fillBytes > 0) {
+		// budeme zapisovat vyplnove byty -> zacneme na konci soucasneho souboru
+		currCluster = get_cluster_by_offset(fatTable, fileToWriteTo.start_cluster, allocatedSize, clusterSize);
+	}
+	else {
+		currCluster = get_cluster_by_offset(fatTable, fileToWriteTo.start_cluster, offset, clusterSize);
+	}
+
 	// zapis fill byty
-	clusterBuffer = new char[clusterSize];
-	memset(clusterBuffer, 0, clusterSize);
 	while (writtenBytes < fillBytes && !isError) {
 		// todo: tady by sla optimalizace zapisem po vice clusterech najednou
-		isError = write_cluster_range(diskNumber, bootRecord, currCluster, 1, clusterBuffer);
+		isError = write_cluster_range(diskNumber, bootRecord, currCluster, 1, &(clusterBuffer[0]));
 		writtenBytes += clusterSize;
 		currCluster = fatTable[currCluster];
 	}
 
 	if (isError) {
-		delete[] clusterBuffer;
 		return isError;
 	}
 
@@ -307,17 +313,14 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 	if (bytesToWrite > bufferLen) {
 		bytesToWrite = bufferLen;
 	}
-	currCluster = get_cluster_by_offset(fatTable, fileToWriteTo.start_cluster, offset, clusterSize);
-	isError = read_cluster_range(diskNumber, bootRecord, currCluster, 1, clusterBuffer, clusterSize);
+	isError = read_cluster_range(diskNumber, bootRecord, currCluster, 1, &(clusterBuffer[0]), clusterSize);
 	if (isError) {
-		delete[] clusterBuffer;
 		return isError;
 	}
 
 	memcpy(&(clusterBuffer[clusterOffset]), buffer, bytesToWrite);
-	isError = write_cluster_range(diskNumber, bootRecord, currCluster, 1, clusterBuffer);
+	isError = write_cluster_range(diskNumber, bootRecord, currCluster, 1, &(clusterBuffer[0]));
 	if (isError) {
-		delete[] clusterBuffer;
 		return isError;
 	}
 	writtenBytes += bytesToWrite;
@@ -332,7 +335,6 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 		}
 
 		if (isError) {
-			delete[] clusterBuffer;
 			return isError;
 		}
 	}
@@ -340,20 +342,18 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 
 	// jeste musime zapsat 'ocasek' dat na posledni cluster
 	if (writtenBytes != bufferLen) {
-		isError = read_cluster_range(diskNumber, bootRecord, currCluster, 1, clusterBuffer, clusterSize);
+		isError = read_cluster_range(diskNumber, bootRecord, currCluster, 1, &(clusterBuffer[0]), clusterSize);
 		if (isError) {
-			delete[] clusterBuffer;
 			return isError;
 		}
 
 		// prepsat zacatek clusteru zbyvajicimi daty
 		bytesToWrite = bufferLen - writtenBytes;
-		memcpy(clusterBuffer, &(buffer[writtenBytes]), bytesToWrite);
+		memcpy(&(clusterBuffer[0]), &(buffer[writtenBytes]), bytesToWrite);
 
 		// zapsat
-		isError = write_cluster_range(diskNumber, bootRecord, currCluster, 1, clusterBuffer);
+		isError = write_cluster_range(diskNumber, bootRecord, currCluster, 1, &(clusterBuffer[0]));
 	}
-	delete[] clusterBuffer;
 
 	// spravne nastaveni velikosti souboru
 	if (offset + bufferLen > fileToWriteTo.size) {
@@ -739,13 +739,12 @@ uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & b
 	uint64_t startSector = first_data_sector(bootRecord) + cluster * bootRecord.cluster_size;
 	uint64_t sectorCount = clusterCount * bootRecord.cluster_size;
 	size_t bytesToRead = sectorCount * bootRecord.bytes_per_sector;
-	char* sectorBuffer = new char[sectorCount * bootRecord.bytes_per_sector];
+	std::vector<char> sectorBuffer(sectorCount * bootRecord.bytes_per_sector, 0);
 
 	// nacti sektory obsahujici 1 cluster do sectorBufferu
-	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, sectorBuffer);
+	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, &(sectorBuffer[0]));
 	if (readRes != FsError::SUCCESS) {
 		// chyba pri cteni z disku
-		delete[] sectorBuffer;
 		return readRes;
 	}
 
@@ -755,7 +754,7 @@ uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & b
 	if (bytesToRead < bufferLen) {
 		bytesToRead = bufferLen;
 	}
-	memcpy(buffer, sectorBuffer, bytesToRead);
+	memcpy(buffer, &(sectorBuffer[0]), bytesToRead);
 	return FsError::SUCCESS;
 }
 
