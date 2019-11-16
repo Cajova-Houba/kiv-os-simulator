@@ -51,15 +51,15 @@ uint16_t Filesystem::LoadDirContents(const std::uint8_t diskNumber, const  std::
 	return opRes;
 }
 
-uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char * buffer, size_t bufferLen)
+uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char * buffer, const size_t bufferLen)
 {
 	Boot_record fatBootRec;
 	uint16_t opRes = 0;
 	int dirCluster = 0;
 	std::vector<std::string> filePathItems;
+	std::vector<int32_t> fatTable;
 	Directory fileToRead;
 	Directory parentDir;
-	int32_t* fatTable = NULL;
 	kiv_hal::TDrive_Parameters parameters;
 	uint32_t matchCounter;
 
@@ -76,10 +76,9 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 	}
 
 	// nacti FAT
-	fatTable = new int32_t[fatBootRec.usable_cluster_count];
-	opRes = load_fat(diskNumber, fatBootRec, fatTable);
+	fatTable.resize(fatBootRec.usable_cluster_count);
+	opRes = load_fat(diskNumber, fatBootRec, &(fatTable[0]));
 	if (opRes != FsError::SUCCESS) {
-		delete[] fatTable;
 		return opRes;
 	}
 
@@ -89,20 +88,16 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 	// najdi soubor
 	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToRead, parentDir, matchCounter);
 	if (opRes != FsError::SUCCESS) {
-		delete[] fatTable;
 		return opRes;
 	}
 
 	// nacti soubor
-	opRes = read_file(diskNumber, fatBootRec, fatTable, fileToRead, buffer, bufferLen);
-
-	// uklid
-	delete[] fatTable;
+	opRes = read_file(diskNumber, fatBootRec, &(fatTable[0]), fileToRead, buffer, bufferLen);
 
 	return opRes;
 }
 
-uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char * buffer, size_t bufferLen)
+uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char * buffer, const size_t bufferLen)
 {
 	Boot_record fatBootRec;
 	uint16_t opRes = 0;
@@ -110,7 +105,7 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 	std::vector<std::string> filePathItems;
 	Directory fileToWriteTo;
 	Directory parentDir;
-	int32_t* fatTable = NULL;
+	std::vector<int32_t> fatTable;
 	kiv_hal::TDrive_Parameters parameters;
 	uint32_t matchCounter;
 
@@ -127,10 +122,9 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 	}
 
 	// nacti FAT
-	fatTable = new int32_t[fatBootRec.usable_cluster_count];
-	opRes = load_fat(diskNumber, fatBootRec, fatTable);
+	fatTable.resize(fatBootRec.usable_cluster_count);
+	opRes = load_fat(diskNumber, fatBootRec, &(fatTable[0]));
 	if (opRes != FsError::SUCCESS) {
-		delete[] fatTable;
 		return opRes;
 	}
 
@@ -139,16 +133,13 @@ uint16_t Filesystem::WriteFileContents(const std::uint8_t diskNumber, const std:
 	Util::SplitPath(fileName, filePathItems);
 	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToWriteTo, parentDir, matchCounter);
 	if (opRes != FsError::SUCCESS) {
-		delete[] fatTable;
 		return opRes;
 	}
 
-	opRes = write_file(diskNumber, fatBootRec, fatTable, fileToWriteTo, offset, buffer, bufferLen);
-
-	delete[] fatTable;
+	opRes = write_file(diskNumber, fatBootRec, &(fatTable[0]), fileToWriteTo, offset, buffer, bufferLen);
 
 	// update zaznamu souboru v parent adresari
-	opRes = update_file_in_dir(diskNumber, fatBootRec, parentDir, fileToWriteTo);
+	opRes = update_file_in_dir(diskNumber, fatBootRec, parentDir, fileToWriteTo.name, fileToWriteTo);
 
 	return opRes;
 }
@@ -165,8 +156,51 @@ uint16_t Filesystem::CreateFile(const std::uint8_t diskNumber, const std::string
 
 uint16_t Filesystem::DeleteFile(const std::uint8_t diskNumber, const std::string fileName)
 {
-	// todo:
-	return uint16_t();
+	Boot_record fatBootRec;
+	uint16_t opRes = 0;
+	int dirCluster = 0;
+	std::vector<std::string> filePathItems;
+	std::vector<int32_t> fatTable;
+	Directory fileToDelete;
+	Directory parentDir;
+	kiv_hal::TDrive_Parameters parameters;
+	uint32_t matchCounter;
+
+	// nacti parametry disku
+	opRes = LoadDiskParameters(diskNumber, parameters);
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
+
+	// nacti BR
+	opRes = load_boot_record(diskNumber, parameters, fatBootRec);
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
+	fatTable.resize(fatBootRec.usable_cluster_count);
+
+	// nacti FAT
+	opRes = load_fat(diskNumber, fatBootRec, &(fatTable[0]));
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
+
+	// najdi soubor
+	// rozdel fileName na jmena
+	Util::SplitPath(fileName, filePathItems);
+	opRes = find_file(diskNumber, fatBootRec, filePathItems, fileToDelete, parentDir, matchCounter);
+	if (opRes != FsError::SUCCESS) {
+		return opRes;
+	}
+
+	// tohle maze jen sobory, ne adresare
+	if (!fileToDelete.isFile) {
+		return FsError::NOT_A_FILE;
+	}
+
+	opRes = delete_file(diskNumber, fatBootRec, &(fatTable[0]), parentDir, fileToDelete);
+
+	return opRes;
 }
 
 uint16_t Filesystem::LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters)
@@ -193,7 +227,7 @@ uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::str
 	Directory newFile,
 		parentDir,
 		tmp;
-	int32_t* fatTable = NULL;
+	std::vector<int32_t> fatTable;
 	kiv_hal::TDrive_Parameters parameters;
 	uint32_t matchCounter;
 
@@ -219,12 +253,11 @@ uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::str
 	if (isError) {
 		return isError;
 	}
+	fatTable.resize(fatBootRec.usable_cluster_count);
 
 	// nacti FAT
-	fatTable = new int32_t[fatBootRec.usable_cluster_count];
-	isError = load_fat(diskNumber, fatBootRec, fatTable);
+	isError = load_fat(diskNumber, fatBootRec, &(fatTable[0]));
 	if (isError) {
-		delete[] fatTable;
 		return isError;
 	}
 
@@ -238,19 +271,16 @@ uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::str
 	// pokud metoda vrati SUCCESS, vime ze cilovy soubor jiz existuje a je treba vratit chybu
 	isError = find_file(diskNumber, fatBootRec, filePathItems, tmp, parentDir, matchCounter);
 	if (isError == FsError::SUCCESS) {
-		delete[] fatTable;
 		return FsError::FILE_ALREADY_EXISTS;
 	} else if (isError == FsError::FILE_NOT_FOUND &&
 		(matchCounter != filePathItems.size() - 1)) {
 		// soubor nenalezen a match counter ma spatnou hodnotu -> chybi cast zadane cesty
-		delete[] fatTable;
 		return isError;
 	}
 
 	// adresar/soubor
 	newFile.isFile = isFile;
-	isError = create_file(diskNumber, fatBootRec, fatTable, parentDir, newFile);
-	delete[] fatTable;
+	isError = create_file(diskNumber, fatBootRec, &(fatTable[0]), parentDir, newFile);
 
 	return isError;
 }

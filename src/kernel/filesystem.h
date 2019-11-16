@@ -57,7 +57,7 @@ namespace Filesystem {
 	 * @return
 	 *	FsError::SUCCESS pokud byl obsah v poradku nacten.
 	 */
-	uint16_t ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char* buffer, size_t bufferLen);
+	uint16_t ReadFileContents(const std::uint8_t diskNumber, const std::string fileName, char* buffer, const size_t bufferLen);
 
 	/**
 	 * @brief Zapise obsah bufferu do souboru od daneho offsetu.
@@ -68,7 +68,7 @@ namespace Filesystem {
 	 * @param buffer Buffer ze ktereho se budou zapisovat data na disk.
 	 * @param bufferLen Maximalni delka bufferu ze ktereho se zapisuje.
 	 */
-	uint16_t WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char* buffer, size_t bufferLen);
+	uint16_t WriteFileContents(const std::uint8_t diskNumber, const std::string fileName, const uint32_t offset, char* buffer, const size_t bufferLen);
 
 	/**
 	 * @brief Vytvori zadany adresar.

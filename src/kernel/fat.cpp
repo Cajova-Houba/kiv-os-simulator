@@ -134,7 +134,7 @@ uint16_t load_fat(const std::uint8_t diskNumber, const Boot_record& bootRecord, 
 	return FsError::SUCCESS;
 }
 
-uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest)
+uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest, const bool includeEmpty)
 {
 	// kontrola, ze je vazne potreba cokoliv delat
 	if (dir.isFile) {
@@ -163,10 +163,10 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bo
 
 	// vyber neprazdne polozky
 	for (i = 0; i < itemsInDirectory; i++) {
-		if (dirItems[i].name[0] != '\0') {
-			// jmeno neni prazdne -> existujici soubor
+		if (includeEmpty || dirItems[i].name[0] != '\0') {
+			// bud chceme vse, nebo jen neprazdne polozky
 			dest.push_back(dirItems[i]);
-		}
+		} 
 	}
 
 	// uklid
@@ -364,6 +364,32 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 	return update_fat(diskNumber, bootRecord, fatTable);
 }
 
+uint16_t delete_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, const Directory & parentDirectory, Directory & fileToDelete)
+{
+	int32_t cluster = fileToDelete.start_cluster;
+	int32_t prevCluster = 0;
+	uint16_t isError = 0;
+	int itemPos = 0;
+	std::string origFileName(fileToDelete.name);
+	
+	// update itemu v adresari
+	memset(&fileToDelete, 0, sizeof(Directory));
+
+	isError = update_file_in_dir(diskNumber, bootRecord, parentDirectory, origFileName, fileToDelete);
+	if (isError) {
+		return isError;
+	}
+
+	// prepsat FAT
+	while (cluster != FAT_FILE_END) {
+		prevCluster = cluster;
+		cluster = fatTable[cluster];
+		fatTable[prevCluster] = FAT_UNUSED;
+	}
+
+	return update_fat(diskNumber, bootRecord, fatTable);
+}
+
 uint16_t allocate_clusters(const Boot_record & bootRecord, int32_t * fatTable, const int32_t lastCluster, const size_t clusterCount)
 {
 	const size_t freeClusters = count_free_clusters(fatTable, bootRecord.usable_cluster_count);
@@ -452,26 +478,16 @@ uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootReco
 	return update_fat(diskNumber, bootRecord, fatTable);
 }
 
-uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & parentDirectory, const Directory & fileToUpdate)
+uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & parentDirectory, const std::string originalFileName, const Directory & fileToUpdate)
 {
 	const std::string fName(fileToUpdate.name);
 	const size_t clusterSize = bytes_per_cluster(bootRecord);
-	std::vector<Directory> dirItems;
+	const size_t maxItemsInDir = max_items_in_directory(bootRecord);
+	Directory * dirItems;
 	uint16_t isError = 0;
 	int itemIndex = 0;
 	char *clusterBuffer;
-
-	// itemy v adresari
-	isError = load_items_in_dir(diskNumber, bootRecord, parentDirectory, dirItems);
-	if (isError) {
-		return isError;
-	}
-
-	// je tam fileToUpdate ?
-	itemIndex = is_item_in_dir(fName, dirItems);
-	if (itemIndex < 0) {
-		return FsError::FILE_NOT_FOUND;
-	}
+	size_t i = 0;
 
 	// update itemu
 	clusterBuffer = new char[bytes_per_cluster(bootRecord)];
@@ -480,7 +496,23 @@ uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & b
 		delete[] clusterBuffer;
 		return isError;
 	}
-	memcpy(&(clusterBuffer[itemIndex * sizeof(Directory)]), &fileToUpdate, sizeof(Directory));
+
+	// najdi item v adresari
+	dirItems = (Directory *)clusterBuffer;
+	for (i = 0; i < maxItemsInDir; i++) {
+		if (originalFileName.compare(dirItems[i].name) == 0) {
+			break;
+		}
+	}
+
+	// je item v adresari?
+	if (i == maxItemsInDir) {
+		delete[] clusterBuffer;
+		return FsError::FILE_NOT_FOUND;
+	}
+
+	// update itemu
+	memcpy(&(clusterBuffer[i * sizeof(Directory)]), &fileToUpdate, sizeof(Directory));
 
 	isError = write_cluster_range(diskNumber, bootRecord, parentDirectory.start_cluster, 1, clusterBuffer);
 	delete[] clusterBuffer;
@@ -522,7 +554,7 @@ uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 	bool searchForFile = true;
 	uint16_t res = FsError::FILE_NOT_FOUND;
 	int currPathItem = 0;
-	int i = 0;
+	int i = 0; 
 	matchCounter = 0;
 
 	// nacti obsah rootu

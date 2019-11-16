@@ -200,11 +200,13 @@ uint16_t load_fat(const std::uint8_t diskNumber, const Boot_record& bootRecord, 
 /**
  * @brief Nacte polozky v adresari do dest.
  *
+ * @param includeEmpty Vrati i nepouzite polozky.
+ *
  * @return
  *	FsError::SUCCESS polozky nacteny.
  *	FsError::NOT_A_DIR pokud dir neni slozka.
  */
-uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest);
+uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest, const bool includeEmpty = false);
 
 /**
  * @brief Precte obsah soboru do bufferu.
@@ -224,6 +226,12 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
  *	FsError::SUCCESS uspesne zapsano do souboru.
  */
 uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, Directory & fileToWriteTo, const size_t offset, char* buffer, const size_t bufferLen);
+
+/**
+ * @brief Smaze zadany soubor. Data realne zustanou na disku, pouze se upravi FAT a directory zaznam v rodicovskem adresari. fileToDelete bude po zavolani
+ *	teto funkce obsahovat pouze 0 (pouzije se funkce memset).
+ */
+uint16_t delete_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, const Directory & parentDirectory, Directory & fileToDelete);
 
 /**
  * @biref Alokuje zadany pocet clusteru ve FAT od zadaneho poledniho clusteru.
@@ -251,11 +259,13 @@ uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootReco
 /**
  * @brief Prehraje zadanou polozku (fileToUpdate) v zadanem adresari (parentDirectory).
  *
+ * @param originalFileName Puvodni jmeno souboru, ktery ma byt nahrazen.
+ *
  * @return
  *	FsError::SUCCESS pokud vse v poradku
  *	FsError::FILE_NOT_FOUND pokud nebyl fileToUpdate nalezen v rodicovskem adresari.
  */
-uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & parentDirectory, const Directory & fileToUpdate);
+uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & parentDirectory, const std::string originalFileName, const Directory & fileToUpdate);
 
 /**
  * Returns the first unused cluster found or NO_CLUSTER.
