@@ -28,7 +28,7 @@ uint16_t init_fat(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters para
 		return FsError::FULL_DISK;
 	}
 
-	fat_table[0] = ROOT_CLUSTER;
+	fat_table[0] = FAT_DIRECTORY;
 	for (i = 1; i < DEF_MIN_DATA_CL; i++) {
 		fat_table[i] = FAT_UNUSED;
 	}
@@ -58,7 +58,7 @@ uint16_t init_fat(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters para
 
 	// fat a kopie
 	for (i = 0; i < new_record.fat_copies; i++) {
-		memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE + i* DEF_MIN_DATA_CL * sizeof(int32_t)]), &fat_table, sizeof(fat_table));
+		memcpy(&(buffer[ALIGNED_BOOT_REC_SIZE + i* DEF_MIN_DATA_CL * sizeof(int32_t)]), &fat_table, DEF_MIN_DATA_CL*sizeof(int32_t));
 	}
 
 	// zapis metadat FAT
@@ -451,7 +451,7 @@ uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootReco
 	delete[] dirBuffer;
 
 	// update FAT
-	fatTable[newFile.start_cluster] = FAT_FILE_END;
+	fatTable[newFile.start_cluster] = newFile.isFile ? FAT_FILE_END : FAT_DIRECTORY;
 	return update_fat(diskNumber, bootRecord, fatTable);
 }
 
@@ -615,13 +615,14 @@ uint16_t update_fat(const std::uint8_t diskNumber, const Boot_record & bootRecor
 	const size_t fatLen = bootRecord.usable_cluster_count;
 	const size_t bytesToWrite = sizeof(bootRecord) + bootRecord.usable_cluster_count*bootRecord.fat_copies * fatLen;
 	const uint64_t sectorCount = first_data_sector(bootRecord);
-	char *buffer = new char[sectorCount * bootRecord.bytes_per_sector];
+	const size_t bufferLen = sectorCount * bootRecord.bytes_per_sector;
+	char *buffer = new char[bufferLen];
 	size_t i = 0,
 		bufferPointer = 0;
 	uint16_t isError = 0;
 
 	// prednaplnime buffer 0, aby tam nebylo nic divnyho
-	memset(buffer, 0, sizeof(buffer));
+	memset(buffer, 0, bufferLen);
 
 	// boot record
 	memcpy(buffer, &bootRecord, sizeof(Boot_record));
@@ -630,7 +631,7 @@ uint16_t update_fat(const std::uint8_t diskNumber, const Boot_record & bootRecor
 	// fat and copies
 	for (i = 0; i < bootRecord.fat_copies; i++) {
 		bufferPointer += i * fatLen * sizeof(int32_t);
-		memcpy(&(buffer[bufferPointer]), fat, fatLen);
+		memcpy(&(buffer[bufferPointer]), fat, fatLen * sizeof(int32_t));
 	}
 
 	isError = write_to_disk(diskNumber, 0, sectorCount, buffer);
