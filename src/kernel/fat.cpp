@@ -336,10 +336,7 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 			return isError;
 		}
 	}
-	else {
-		// potrebujeme zapsat mene nez cely cluster -> pouze posun cluster a nic nedelej
-		currCluster = fatTable[currCluster];
-	}
+	currCluster = fatTable[currCluster];
 
 	// jeste musime zapsat 'ocasek' dat na posledni cluster
 	if (writtenBytes != bufferLen) {
