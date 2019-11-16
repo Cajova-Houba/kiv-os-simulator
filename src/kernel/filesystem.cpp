@@ -197,6 +197,17 @@ uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::str
 	kiv_hal::TDrive_Parameters parameters;
 	uint32_t matchCounter;
 
+	// rozdel fileName na jmena
+	Util::SplitPath(dirName, filePathItems);
+	if (filePathItems.size() == 0) {
+		// nemuzeme znova vytvorit root
+		return FsError::UNKNOWN_ERROR;
+	}
+
+	if (filePathItems[filePathItems.size() - 1].size() > MAX_NAME_LEN - 1) {
+		return FsError::FILE_NAME_TOO_LONG;
+	}
+
 	// nacti parametry disku
 	isError = LoadDiskParameters(diskNumber, parameters);
 	if (isError) {
@@ -215,14 +226,6 @@ uint16_t Filesystem::_CreateFileInternal(std::uint8_t diskNumber, const std::str
 	if (isError) {
 		delete[] fatTable;
 		return isError;
-	}
-
-	// rozdel fileName na jmena
-	Util::SplitPath(dirName, filePathItems);
-	if (filePathItems.size() == 0) {
-		// nemuzeme znova vytvorit root
-		delete[] fatTable;
-		return FsError::UNKNOWN_ERROR;
 	}
 
 	// posledni item z filePathItems a pouzij ho jako jmeno noveho souboru
