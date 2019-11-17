@@ -46,6 +46,7 @@
 #define DEF_FAT_COPIES			 1
 #define DEF_MIN_DATA_CL          252
 #define MIN_REQ_SECOTR_SIZE		 256	
+#define PREFERRED_CLUSTER_SIZE	 256
 
 #define MAX_NAME_LEN             12
 
@@ -80,11 +81,11 @@ typedef enum {
  */
 typedef struct{
     char volume_descriptor[DESCRIPTION_LEN];    // FS description,							250B
-    int8_t fat_type;                            // FAT type (FAT12, FAT16...),				1B
-    int8_t fat_copies;                          // number of FAT copies,					1B
-    int16_t cluster_size;                       // cluster size (# of sectors per cluster)	2B
-    int32_t usable_cluster_count;               // max number of cluster for data			4B
-	int16_t bytes_per_sector;					// number of bytes in 1 sector				2B
+    uint8_t fat_type;                           // FAT type (FAT12, FAT16...),				1B
+    uint8_t fat_copies;                         // number of FAT copies,					1B
+    uint16_t cluster_size;                      // cluster size (# of sectors per cluster)	2B
+    uint32_t usable_cluster_count;              // max number of cluster for data			4B
+	uint16_t bytes_per_sector;					// number of bytes in 1 sector				2B
     char signature[SIGNATURE_LEN];              // orion login								9B
 } Boot_record;//																			269B
 
@@ -110,7 +111,7 @@ constexpr int32_t find_last_file_cluster(const int32_t * fat, const int32_t star
 }
 
 constexpr size_t bytes_per_cluster(const Boot_record& bootRecord) {
-	return bootRecord.bytes_per_sector * bootRecord.cluster_size;
+	return (size_t) bootRecord.bytes_per_sector * bootRecord.cluster_size;
 }
 
 constexpr size_t count_file_clusters(const int32_t* fat, const int32_t startCluster) {
@@ -243,15 +244,6 @@ uint16_t delete_file(const std::uint8_t diskNumber, const Boot_record & bootReco
 uint16_t allocate_clusters(const Boot_record & bootRecord, int32_t* fatTable, const int32_t lastCluster, const size_t clusterCount);
 
 /**
- * @brief Prida na konec souboru dany pocet nul.
- * 
- * Kontrola, jestli je dost mista pocita s poctem clusteru k zapisu jako ceil(zeroCount / bytes_per_sector) coz muze teoreticky zpusobit, ze funkce vrati
- * DISK_FULL protoze nepocita s pripadnym mistem 
- *
- */
-uint16_t append_zero_to_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t* fatTable, const int32_t lastSector, const size_t zeroCount);
-
-/**
  * @brief Vytvori novy soubor v danem rodicovskem adresari
  * 
  * @return
@@ -302,14 +294,6 @@ int get_data_position(Boot_record *boot_record);
 uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord,
 	const std::vector<std::string> & filePath,
 	Directory & foundFile, Directory & parentDirectory, uint32_t & matchCounter);
-
-/**
- * Will read the cluster and determines if it's bad - starts and ends with FFFFFF.
- * Cluster is expected to be a char array of cluster size.
- *
- * @return OK: Cluster is bad. NOK: Cluster is ok.
- */
-int is_cluster_bad(char *cluster, int cluster_size);
 
 /**
  * @brief Ulozi bootRecord, FAT a pripadne kopie.
