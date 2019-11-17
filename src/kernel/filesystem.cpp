@@ -92,7 +92,7 @@ uint16_t Filesystem::ReadFileContents(const std::uint8_t diskNumber, const std::
 	}
 
 	// nacti soubor
-	opRes = read_file(diskNumber, fatBootRec, &(fatTable[0]), fileToRead, buffer, bufferLen);
+	opRes = read_file(diskNumber, fatBootRec, &(fatTable[0]), fileToRead, buffer, bufferLen, offset);
 
 	return opRes;
 }

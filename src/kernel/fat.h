@@ -211,11 +211,14 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bo
 /**
  * @brief Precte obsah soboru do bufferu.
  * 
+ * @param bufferLen Velikost buffero do ktereho se cte. V podstate udava, kolik max bytu precist ze souboru.
+ * @param offset Offset od ktereho cist. Pokud je vetsi nebo roven soucasne velikosti souboru, nic nebude precteno.
+ *
  * @return
  *	FsError::SUCCESS obsah souboru precten.
  *  FsError::NOT_A_FILE fileToRead neni soubor (ale adresar).
  */
-uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, size_t bufferLen);
+uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, const size_t bufferLen, const size_t offset = 0);
 
 /**
  * @brief Zapise do existujiciho souboru data z bufferu.
@@ -330,6 +333,14 @@ int unused_cluster_count(int32_t *fat, int fat_length);
 ****************************/
 
 /**
+ * @brief Rozdeli dany soubor na souvisle useky clusteru (startCluster + pocet souvislych clusteru). Funguje i pro adresare.
+ *	Max velikost chunku je 1000.
+ *
+ *
+ */
+void split_file_to_chunks(const int32_t* fatTable, const int32_t startCluster, std::vector<std::array<int32_t,2>> & chunks);
+
+/**
  * @brief Vrati cislo clusteru ve kterem se nachazi dany offset
  */
 int32_t get_cluster_by_offset(const int32_t* fatTable, const int32_t startCluster, const size_t offset, const size_t clusterSize);
@@ -360,7 +371,7 @@ void copy_dir(Directory & dest, const Directory & source);
  * 
  * @param bufferLen Maximalni pocet bytu ktery nacist do bufferu. Relevantni jen pokud je tento pocet mensi nez pocet clusteru * velikost clusteru.
  */
-uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char* buffer, const size_t bufferLen);
+uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char* buffer, const size_t bufferLen, const size_t readOffset = 0);
 
 /**
  * @brief Zapise dany pocet clusteru z bufferu na disk. Predpoklada se, ze velikost buffer je >= poctu zapisovanych bytu.

@@ -1,5 +1,6 @@
 #include <string>
 #include <cstdlib>
+#include <array>
 #include "fat.h"
 
 uint16_t init_fat(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters parameters)
@@ -177,48 +178,59 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bo
 	return FsError::SUCCESS;
 }
 
-uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & fileToRead, char * buffer, size_t bufferLen)
+uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, const size_t bufferLen, const size_t offset)
 {
 	if (!fileToRead.isFile) {
 		return FsError::NOT_A_FILE;
 	}
 
+	// neni co cist
+	if (offset >= fileToRead.size || bufferLen == 0) {
+		return FsError::SUCCESS;
+	}
+
     const size_t bytesPerCluster = bytes_per_cluster(bootRecord);
 
 	uint16_t res = FsError::UNKNOWN_ERROR,
-			readRes = FsError::UNKNOWN_ERROR;
+			isError = FsError::UNKNOWN_ERROR;
 	int32_t currentCluster = fileToRead.start_cluster;
+	std::vector<std::array<int32_t, 2>> chunks;
 	
 	size_t currBytesToRead = bytesPerCluster,
-		totalBytes = 0;
+		totalBytes = 0,
+		currOffset = 0,
+		totalBytesToRead = 0,
+		i = 0;
 	bool bufferFull = false;
 
-	// todo: tady je prostor pro optimalizaci
-	// lze predem pripravit seznam chunku clusteru
-	// ktere se maji nacist a predat je metode read_cluster_range
-	// misto soucasneho cteni po 1
+	// od ktere casti ktereho clusteru budeme cist
+	currentCluster = get_cluster_by_offset(fatTable, fileToRead.start_cluster, offset, bytesPerCluster);
+	currOffset = offset % bytesPerCluster;
+	currBytesToRead = bytesPerCluster - currOffset;
 
-	// po jednom nacitej clustery z disku
-	while (currentCluster != FAT_FILE_END && !bufferFull) {
+	// rozdelit zbytek soubor na chunky
+	split_file_to_chunks(fatTable, currentCluster, chunks);
+
+	// ted nacitej po clusterech
+	for (i = 0; i < chunks.size() && !bufferFull; i++) {
 		// pokud uz je cilovy buffer plny a cely cluster se do nej nevejde,
 		// nacti jen to co muzes
-		if (totalBytes + bytesPerCluster > bufferLen) {
-			currBytesToRead = bufferLen - (totalBytes);
+		currBytesToRead = chunks[i][1] * bytesPerCluster - currOffset;
+		if (totalBytes + currBytesToRead > bufferLen) {
+			currBytesToRead = bufferLen - totalBytes;
 			bufferFull = true;
 		}
-		readRes = read_cluster_range(diskNumber, bootRecord, currentCluster, 1, &(buffer[totalBytes]), currBytesToRead);
-		if (readRes != FsError::SUCCESS) {
-			res = readRes;
+
+		// nacti chunk do bufferu
+		isError = read_cluster_range(diskNumber, bootRecord, chunks[i][0], (uint32_t)chunks[i][1], &(buffer[totalBytes]), currBytesToRead, currOffset);
+		if (isError) {
+			res = isError;
 			break;
 		}
 		totalBytes += currBytesToRead;
-		// todo: text v testovacim prikladu ma na konci kazdeho sektoru byte '\0' coz znamena
-		// ze i kdyz se cely text ze souboru nacte (ze vsech clusteru), je vypsana pouze prvni
-		// cast (protoze pak je '\0' a az pak je dalsi cast).
-		buffer[totalBytes-1] = ' ';
-		
-		// prejdi na dalsi cluster
-		currentCluster = fatTable[currentCluster];
+
+		// s offsetem cteme jen pri ctnei prvniho clusteru
+		currOffset = 0;
 	}
 
 	// uspesne jme vse precetli
@@ -681,6 +693,29 @@ int unused_cluster_count(int32_t *fat, int fat_length) {
     return count;
 }
 
+void split_file_to_chunks(const int32_t* fatTable, const int32_t startCluster, std::vector<std::array<int32_t, 2>> & chunks)
+{
+	int32_t currCluster = startCluster,
+		prevCluster = startCluster,
+		chunkStart = startCluster,
+		chunkSize = 1;
+
+	while (currCluster != FAT_FILE_END && currCluster != FAT_DIRECTORY) {
+		currCluster = fatTable[currCluster];
+		if (currCluster - prevCluster == 1 && chunkSize != 1000 ) {
+			// predchozi cluster je tesne pred soucasnym, pokracuj v chunku
+			chunkSize++;
+		}
+		else {
+			// predchozi cluster je jinde v pameti
+			chunks.push_back({ {chunkStart, chunkSize} });
+			chunkStart = currCluster;
+			chunkSize = 1;
+		}
+		prevCluster = currCluster;
+	}
+}
+
 int32_t get_cluster_by_offset(const int32_t * fatTable, const int32_t startCluster, const size_t offset, const size_t clusterSize)
 {
 	if (offset == 0) {
@@ -734,12 +769,16 @@ void copy_dir(Directory & dest, const Directory & source)
 	strcpy_s(dest.name, source.name);
 }
 
-uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char* buffer, const size_t bufferLen)
+uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char* buffer, const size_t bufferLen, const size_t readOffset)
 {
 	uint64_t startSector = first_data_sector(bootRecord) + cluster * bootRecord.cluster_size;
 	uint64_t sectorCount = clusterCount * bootRecord.cluster_size;
 	size_t bytesToRead = sectorCount * bootRecord.bytes_per_sector;
 	std::vector<char> sectorBuffer(sectorCount * bootRecord.bytes_per_sector, 0);
+
+	if (readOffset > bytesToRead) {
+		return FsError::SUCCESS;
+	}
 
 	// nacti sektory obsahujici 1 cluster do sectorBufferu
 	uint16_t readRes = read_from_disk(diskNumber, startSector, sectorCount, &(sectorBuffer[0]));
@@ -754,7 +793,7 @@ uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & b
 	if (bytesToRead < bufferLen) {
 		bytesToRead = bufferLen;
 	}
-	memcpy(buffer, &(sectorBuffer[0]), bytesToRead);
+	memcpy(buffer, &(sectorBuffer[readOffset]), bytesToRead - readOffset);
 	return FsError::SUCCESS;
 }
 
