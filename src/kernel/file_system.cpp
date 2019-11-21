@@ -1,7 +1,11 @@
 #include "file_system.h"
+#include "procfs.h"
 
 void FileSystem::init()
 {
+	// "0:\"
+	m_filesystems['0'] = std::make_unique<ProcFS>();
+
 	// TODO
 }
 

@@ -33,6 +33,7 @@
     <ClCompile Include="..\..\src\kernel\path.cpp" />
     <ClCompile Include="..\..\src\kernel\pipe.cpp" />
     <ClCompile Include="..\..\src\kernel\process.cpp" />
+    <ClCompile Include="..\..\src\kernel\procfs.cpp" />
     <ClCompile Include="..\..\src\kernel\syscall.cpp" />
     <ClCompile Include="..\..\src\kernel\syscall_io.cpp" />
     <ClCompile Include="..\..\src\kernel\syscall_process.cpp" />
@@ -57,6 +58,7 @@
     <ClInclude Include="..\..\src\kernel\path.h" />
     <ClInclude Include="..\..\src\kernel\pipe.h" />
     <ClInclude Include="..\..\src\kernel\process.h" />
+    <ClInclude Include="..\..\src\kernel\procfs.h" />
     <ClInclude Include="..\..\src\kernel\status.h" />
     <ClInclude Include="..\..\src\kernel\syscall.h" />
     <ClInclude Include="..\..\src\kernel\thread.h" />
