@@ -27,7 +27,12 @@ public:
 	HandleStorage() = default;
 
 	HandleReference addHandle(std::unique_ptr<IHandle> && handle);
+
 	HandleReference getHandle(HandleID id);
+	HandleReference getHandleOfType(HandleID id, EHandle type);
+
+	bool hasHandle(HandleID id);
+	bool hasHandleOfType(HandleID id, EHandle type);
 
 	template<class Predicate>
 	std::vector<HandleReference> getHandles(Predicate predicate)

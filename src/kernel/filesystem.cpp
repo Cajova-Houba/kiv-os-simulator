@@ -1,9 +1,27 @@
-﻿#include "filesystem.h"
+// TODO: tento soubor odstranit
+#include "filesystem.h"
 #include "../api/hal.h"
 #include <cstring>
 #include <string>
 #include <cmath>
-#include "util.h"
+#include <sstream>
+#include <vector>
+
+namespace Util
+{
+	inline void SplitPath(std::string filePath, std::vector<std::string> & dest) {
+		// todo: podpora pro relativni cesty
+		std::istringstream iss{ filePath };
+		std::string item;
+		bool first = true;
+		while (std::getline(iss, item, '/')) {
+			if (!first) {
+				dest.push_back(item);
+			}
+			first = false;
+		}
+	}
+}
 
 uint16_t Filesystem::InitNewFileSystem(const std::uint8_t diskNumber, const  kiv_hal::TDrive_Parameters parameters)
 {

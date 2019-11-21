@@ -1,3 +1,4 @@
+// TODO: tento soubor odstranit
 #pragma once
 #include <cstdint>
 

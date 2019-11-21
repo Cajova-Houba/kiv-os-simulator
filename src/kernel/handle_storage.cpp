@@ -67,6 +67,62 @@ HandleReference HandleStorage::getHandle(HandleID id)
 	return HandleReference(it->first, it->second.handle.get());
 }
 
+HandleReference HandleStorage::getHandleOfType(HandleID id, EHandle type)
+{
+	if (!id)
+	{
+		return HandleReference();
+	}
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	auto it = m_handles.find(id);
+	if (it == m_handles.end() || it->second.handle->getHandleType() != type)
+	{
+		return HandleReference();
+	}
+
+	it->second.refCount++;
+
+	return HandleReference(it->first, it->second.handle.get());
+}
+
+bool HandleStorage::hasHandle(HandleID id)
+{
+	if (!id)
+	{
+		return false;
+	}
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	auto it = m_handles.find(id);
+	if (it == m_handles.end())
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool HandleStorage::hasHandleOfType(HandleID id, EHandle type)
+{
+	if (!id)
+	{
+		return false;
+	}
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	auto it = m_handles.find(id);
+	if (it == m_handles.end() || it->second.handle->getHandleType() != type)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 size_t HandleStorage::getHandleCount()
 {
 	std::lock_guard<std::mutex> lock(m_mutex);

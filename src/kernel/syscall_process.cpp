@@ -23,8 +23,8 @@ static EStatus CreateProcess(const char *program, const char *cmdLine, HandleID 
 
 	if (stdInID)
 	{
-		stdIn = pCurrentProcess->getHandle(stdInID);
-		if (!stdIn || stdIn->getHandleType() != EHandle::FILE)
+		stdIn = pCurrentProcess->getHandleOfType(stdInID, EHandle::FILE);
+		if (!stdIn)
 		{
 			return EStatus::INVALID_ARGUMENT;
 		}
@@ -32,16 +32,21 @@ static EStatus CreateProcess(const char *program, const char *cmdLine, HandleID 
 
 	if (stdOutID)
 	{
-		stdOut = pCurrentProcess->getHandle(stdOutID);
-		if (!stdOut || stdOut->getHandleType() != EHandle::FILE)
+		stdOut = pCurrentProcess->getHandleOfType(stdOutID, EHandle::FILE);
+		if (!stdOut)
 		{
 			return EStatus::INVALID_ARGUMENT;
 		}
 	}
 
-	const std::string path = pCurrentProcess->getWorkingDirectory();
+	if (!cmdLine)
+	{
+		cmdLine = "";
+	}
 
-	HandleReference process = Process::Create(entry, cmdLine, path.c_str(), std::move(stdIn), std::move(stdOut));
+	Path path = pCurrentProcess->getWorkingDirectory();
+
+	HandleReference process = Process::Create(program, cmdLine, std::move(path), entry, std::move(stdIn), std::move(stdOut));
 	if (!process)
 	{
 		return EStatus::OUT_OF_MEMORY;

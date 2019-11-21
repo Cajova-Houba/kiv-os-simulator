@@ -7,6 +7,7 @@
 #include "dll.h"
 #include "handle_storage.h"
 #include "event_system.h"
+#include "file_system.h"
 #include "console.h"
 #include "compiler.h"
 
@@ -15,6 +16,7 @@ class Kernel
 	DLL m_userDLL;
 	HandleStorage m_handleStorage;
 	EventSystem m_eventSystem;
+	FileSystem m_fileSystem;
 	HandleReference m_consoleHandle;
 
 	static Kernel *s_pInstance;
@@ -24,6 +26,7 @@ public:
 	: m_userDLL(),
 	  m_handleStorage(),
 	  m_eventSystem(),
+	  m_fileSystem(),
 	  m_consoleHandle()
 	{
 		s_pInstance = this;
@@ -39,6 +42,11 @@ public:
 	static EventSystem & GetEventSystem()
 	{
 		return s_pInstance->m_eventSystem;
+	}
+
+	static FileSystem & GetFileSystem()
+	{
+		return s_pInstance->m_fileSystem;
 	}
 
 	static DLL & GetUserDLL()

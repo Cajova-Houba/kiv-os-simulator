@@ -15,14 +15,14 @@ static void RunShell()
 	HandleReference stdIn  = Kernel::GetHandleStorage().getHandle(console);
 	HandleReference stdOut = Kernel::GetHandleStorage().getHandle(console);
 
-	kiv_os::TThread_Proc shell = Kernel::GetUserDLL().getSymbol<kiv_os::TThread_Proc>("shell");
-	if (!shell)
+	kiv_os::TThread_Proc entry = Kernel::GetUserDLL().getSymbol<kiv_os::TThread_Proc>("shell");
+	if (!entry)
 	{
 		Kernel::Log("Shell nenalezen!");
 		return;
 	}
 
-	Process::Create(shell, "", "C:\\", std::move(stdIn), std::move(stdOut), true);
+	Process::Create("shell", "", Path::Parse("C:"), entry, std::move(stdIn), std::move(stdOut), true);
 }
 
 void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &)
@@ -32,6 +32,9 @@ void __stdcall Bootstrap_Loader(kiv_hal::TRegisters &)
 
 	// nastavení handleru pro syscall interrupt
 	kiv_hal::Set_Interrupt_Handler(kiv_os::System_Int_Number, SysCall::Entry);
+
+	// inicializace disků
+	Kernel::GetFileSystem().init();
 
 	// v rámci ukázky ještě vypíšeme dostupné disky
 	// TODO: tohle odstranit

@@ -1,31 +1,6 @@
-#include <cstring>  // std::memcpy
-
 #include "process.h"
 #include "thread.h"
 #include "kernel.h"
-
-void Process::setWorkingDirectory(const char *path)
-{
-	std::lock_guard<std::mutex> lock(m_mutex);
-
-	m_currentDirectory = path;
-}
-
-size_t Process::getWorkingDirectory(char *buffer, size_t bufferSize)
-{
-	std::lock_guard<std::mutex> lock(m_mutex);
-
-	size_t length = m_currentDirectory.length();
-	if (length >= bufferSize)
-	{
-		length = bufferSize - 1;
-	}
-
-	std::memcpy(buffer, m_currentDirectory.c_str(), length);
-	buffer[length] = '\0';
-
-	return length;
-}
 
 HandleReference Process::getMainThread()
 {
@@ -47,6 +22,48 @@ HandleReference Process::getHandle(HandleID id)
 	}
 
 	return Kernel::GetHandleStorage().getHandle(it->getID());
+}
+
+HandleReference Process::getHandleOfType(HandleID id, EHandle type)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	HandleReference key(id, nullptr);
+	auto it = m_handles.find(key);
+	if (it == m_handles.end() || it->get()->getHandleType() != type)
+	{
+		return HandleReference();
+	}
+
+	return Kernel::GetHandleStorage().getHandle(it->getID());
+}
+
+bool Process::hasHandle(HandleID id)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	HandleReference key(id, nullptr);
+	auto it = m_handles.find(key);
+	if (it == m_handles.end())
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool Process::hasHandleOfType(HandleID id, EHandle type)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	HandleReference key(id, nullptr);
+	auto it = m_handles.find(key);
+	if (it == m_handles.end() || it->get()->getHandleType() != type)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 void Process::addHandle(HandleReference && handle)
@@ -75,7 +92,7 @@ void Process::removeHandle(HandleID id)
 	m_handles.erase(it);
 }
 
-HandleReference Process::Create(kiv_os::TThread_Proc entry, const char *cmdLine, const char *path,
+HandleReference Process::Create(const char *name, const char *cmdLine, Path && path, kiv_os::TThread_Proc entry,
                                 HandleReference && stdIn, HandleReference && stdOut, bool useCurrentThread)
 {
 	HandleReference process = Kernel::GetHandleStorage().addHandle(std::make_unique<Process>());
@@ -86,15 +103,9 @@ HandleReference Process::Create(kiv_os::TThread_Proc entry, const char *cmdLine,
 
 	Process *self = process.as<Process>();
 
-	if (cmdLine)
-	{
-		self->m_cmdLine = cmdLine;
-	}
-
-	if (path)
-	{
-		self->m_currentDirectory = path;
-	}
+	self->m_name = name;
+	self->m_cmdLine = cmdLine;
+	self->m_currentDirectory = std::move(path);
 
 	kiv_hal::TRegisters context;
 	context.rax.x = stdIn.getID();

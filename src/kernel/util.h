@@ -1,70 +1,53 @@
 #pragma once
 
-#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <string>
-#include <algorithm>
-#include <sstream>
-#include <vector>
+
+#include "handle.h"
+#include "file.h"
 
 namespace Util
 {
-	inline std::string NumberToString(uint64_t number, int base = 10, bool upperCase = true)
+	inline HandleID StringToHandleID(const char *string)
 	{
-		if (base < 2 || base > 36)
+		long result = std::atol(string);
+
+		if (result < 0 || result > static_cast<HandleID>(-1))
 		{
-			return std::string();
+			result = 0;  // invalid handle
 		}
 
-		if (number == 0)
-		{
-			return std::string("0");
-		}
-
-		std::string result;
-
-		while (number > 0)
-		{
-			const int digit = number % base;
-
-			if (digit < 10)
-			{
-				result += '0' + digit;
-			}
-			else
-			{
-				const int letter = digit - 10;
-
-				result += (upperCase) ? 'A' + letter : 'a' + letter;
-			}
-
-			number /= base;
-		}
-
-		std::reverse(result.begin(), result.end());
-
-		return result;
+		return static_cast<HandleID>(result);
 	}
 
-	inline std::string NumberToHexString(uint64_t number, bool upperCase = true)
+	inline HandleID StringToHandleID(const std::string & string)
 	{
-		return std::string("0x") + NumberToString(number, 16, upperCase);
+		return StringToHandleID(string.c_str());
 	}
 
-	inline std::string SignedNumberToString(int64_t number)
+	inline size_t SetDirectoryEntry(DirectoryEntry & entry, uint16_t attributes, const char *name, size_t length)
 	{
-		return (number < 0) ? std::string("-") + NumberToString(-number) : NumberToString(number);
-	}
+		entry.attributes = attributes;
 
-	inline void SplitPath(std::string filePath, std::vector<std::string> & dest) {
-		// todo: podpora pro relativni cesty
-		std::istringstream iss{ filePath };
-		std::string item;
-		bool first = true;
-		while (std::getline(iss, item, '/')) {
-			if (!first) {
-				dest.push_back(item);
-			}
-			first = false;
+		if (length >= sizeof entry.name)
+		{
+			length = sizeof entry.name - 1;
 		}
+
+		std::memcpy(entry.name, name, length);
+		entry.name[length] = '\0';
+
+		return length;
+	}
+
+	inline size_t SetDirectoryEntry(DirectoryEntry & entry, uint16_t attributes, const char *name)
+	{
+		return SetDirectoryEntry(entry, attributes, name, std::strlen(name));
+	}
+
+	inline size_t SetDirectoryEntry(DirectoryEntry & entry, uint16_t attributes, const std::string & name)
+	{
+		return SetDirectoryEntry(entry, attributes, name.c_str(), name.length());
 	}
 }
