@@ -123,30 +123,30 @@ public:
 
 inline bool operator==(const Path & a, const Path & b)
 {
-	return a.compare( b ) == 0;
+	return a.compare(b) == 0;
 }
 
 inline bool operator!=(const Path & a, const Path & b)
 {
-	return a.compare( b ) != 0;
+	return a.compare(b) != 0;
 }
 
 inline bool operator<(const Path & a, const Path & b)
 {
-	return a.compare( b ) < 0;
+	return a.compare(b) < 0;
 }
 
 inline bool operator>(const Path & a, const Path & b)
 {
-	return a.compare( b ) > 0;
+	return a.compare(b) > 0;
 }
 
 inline bool operator<=(const Path & a, const Path & b)
 {
-	return a.compare( b ) <= 0;
+	return a.compare(b) <= 0;
 }
 
 inline bool operator>=(const Path & a, const Path & b)
 {
-	return a.compare( b ) >= 0;
+	return a.compare(b) >= 0;
 }

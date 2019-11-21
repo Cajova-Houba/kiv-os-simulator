@@ -1,17 +1,17 @@
 #include "syscall.h"
 #include "kernel.h"
-#include "thread.h"
 #include "process.h"
 
 static EStatus CreateProcess(const char *program, const char *cmdLine, HandleID stdInID, HandleID stdOutID, HandleID & result)
 {
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
+	if (!program || !cmdLine)
 	{
-		return EStatus::UNRECOGNIZED_THREAD;
+		return EStatus::INVALID_ARGUMENT;
 	}
 
-	kiv_os::TThread_Proc entry = Kernel::GetUserDLL().getSymbol<kiv_os::TThread_Proc>(program);
+	Process & currentProcess = Thread::GetProcess();
+
+	TEntryFunc entry = Kernel::GetUserDLL().getSymbol<TEntryFunc>(program);
 	if (!entry)
 	{
 		// program neexistuje
@@ -23,7 +23,7 @@ static EStatus CreateProcess(const char *program, const char *cmdLine, HandleID 
 
 	if (stdInID)
 	{
-		stdIn = pCurrentProcess->getHandleOfType(stdInID, EHandle::FILE);
+		stdIn = currentProcess.getHandleOfType(stdInID, EHandle::FILE);
 		if (!stdIn)
 		{
 			return EStatus::INVALID_ARGUMENT;
@@ -32,19 +32,14 @@ static EStatus CreateProcess(const char *program, const char *cmdLine, HandleID 
 
 	if (stdOutID)
 	{
-		stdOut = pCurrentProcess->getHandleOfType(stdOutID, EHandle::FILE);
+		stdOut = currentProcess.getHandleOfType(stdOutID, EHandle::FILE);
 		if (!stdOut)
 		{
 			return EStatus::INVALID_ARGUMENT;
 		}
 	}
 
-	if (!cmdLine)
-	{
-		cmdLine = "";
-	}
-
-	Path path = pCurrentProcess->getWorkingDirectory();
+	Path path = currentProcess.getWorkingDirectory();
 
 	HandleReference process = Process::Create(program, cmdLine, std::move(path), entry, std::move(stdIn), std::move(stdOut));
 	if (!process)
@@ -54,23 +49,19 @@ static EStatus CreateProcess(const char *program, const char *cmdLine, HandleID 
 
 	result = process.getID();
 
-	pCurrentProcess->addHandle(std::move(process));
+	currentProcess.addHandle(std::move(process));
 
 	return EStatus::SUCCESS;
 }
 
-static EStatus CreateThread(kiv_os::TThread_Proc entry, void *param, HandleID & result)
+static EStatus CreateThread(TEntryFunc entry, void *param, HandleID & result)
 {
 	if (!entry)
 	{
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
+	Process & currentProcess = Thread::GetProcess();
 
 	kiv_hal::TRegisters context;
 	context.rdi.r = reinterpret_cast<uint64_t>(param);
@@ -83,7 +74,7 @@ static EStatus CreateThread(kiv_os::TThread_Proc entry, void *param, HandleID & 
 
 	result = thread.getID();
 
-	pCurrentProcess->addHandle(std::move(thread));
+	currentProcess.addHandle(std::move(thread));
 
 	return EStatus::SUCCESS;
 }
@@ -103,7 +94,7 @@ static EStatus Clone(const kiv_hal::TRegisters & context, HandleID & result)
 		}
 		case kiv_os::NClone::Create_Thread:
 		{
-			kiv_os::TThread_Proc entry = reinterpret_cast<kiv_os::TThread_Proc>(context.rdx.r);
+			TEntryFunc entry = reinterpret_cast<TEntryFunc>(context.rdx.r);
 			void *param = reinterpret_cast<void*>(context.rdi.r);
 
 			return CreateThread(entry, param, result);
@@ -125,13 +116,9 @@ static EStatus WaitFor(const HandleID *handles, uint16_t handleCount, uint16_t &
 
 static EStatus GetExitCode(HandleID id, uint16_t & exitCode)
 {
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
+	Process & currentProcess = Thread::GetProcess();
 
-	HandleReference handle = pCurrentProcess->getHandle(id);
+	HandleReference handle = currentProcess.getHandle(id);
 	if (!handle)
 	{
 		return EStatus::INVALID_ARGUMENT;
@@ -186,7 +173,7 @@ static EStatus SystemShutdown()
 	return EStatus::SUCCESS;
 }
 
-static EStatus SetupSignal(uint8_t signalNumber, kiv_os::TThread_Proc signalHandler)
+static EStatus SetupSignal(uint8_t signalNumber, TEntryFunc signalHandler)
 {
 	if (signalNumber > 32)
 	{
@@ -234,7 +221,7 @@ EStatus SysCall::HandleProcess(kiv_hal::TRegisters & context)
 		}
 		case kiv_os::NOS_Process::Register_Signal_Handler:
 		{
-			return SetupSignal(context.rcx.l, reinterpret_cast<kiv_os::TThread_Proc>(context.rdx.r));
+			return SetupSignal(context.rcx.l, reinterpret_cast<TEntryFunc>(context.rdx.r));
 		}
 	}
 

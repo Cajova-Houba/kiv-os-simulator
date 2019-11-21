@@ -144,6 +144,8 @@ static bool SeekFile(RTL::Handle file, kiv_os::NFile_Seek command, int64_t & pos
 }
 
 
+// ============================================================================
+
 bool RTL::CloseHandle(RTL::Handle handle)
 {
 	kiv_hal::TRegisters registers;
@@ -489,9 +491,9 @@ bool RTL::WriteFile(kiv_os::THandle file, const void *buffer, size_t size, size_
 	return true;
 }
 
-bool RTL::GetFilePos(RTL::Handle file, int64_t & result, RTL::Position base)
+bool RTL::GetFilePos(RTL::Handle file, int64_t & result)
 {
-	return SeekFile(file, kiv_os::NFile_Seek::Get_Position, result, base);
+	return SeekFile(file, kiv_os::NFile_Seek::Get_Position, result, RTL::Position::BEGIN);
 }
 
 bool RTL::SetFilePos(RTL::Handle file, int64_t pos, RTL::Position base)

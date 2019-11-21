@@ -3,22 +3,32 @@
 
 void __stdcall SysCall::Entry(kiv_hal::TRegisters & context)
 {
-	Thread::HandleSignals();
+	EStatus status = EStatus::UNKNOWN_ERROR;
 
-	EStatus status = EStatus::INVALID_ARGUMENT;  // neznámé číslo služby
-
-	switch (static_cast<kiv_os::NOS_Service_Major>(context.rax.h))
+	if (Thread::HasContext())
 	{
-		case kiv_os::NOS_Service_Major::File_System:
+		Thread::HandleSignals();
+
+		switch (static_cast<kiv_os::NOS_Service_Major>(context.rax.h))
 		{
-			status = HandleIO(context);
-			break;
+			case kiv_os::NOS_Service_Major::File_System:
+			{
+				status = HandleIO(context);
+				break;
+			}
+			case kiv_os::NOS_Service_Major::Process:
+			{
+				status = HandleProcess(context);
+				break;
+			}
+			default:
+			{
+				status = EStatus::INVALID_ARGUMENT;  // neznámé číslo služby
+				break;
+			}
 		}
-		case kiv_os::NOS_Service_Major::Process:
-		{
-			status = HandleProcess(context);
-			break;
-		}
+
+		Thread::HandleSignals();
 	}
 
 	if (status == EStatus::SUCCESS)
@@ -30,6 +40,4 @@ void __stdcall SysCall::Entry(kiv_hal::TRegisters & context)
 		context.flags.carry = 1;
 		context.rax.x = static_cast<uint16_t>(status);
 	}
-
-	Thread::HandleSignals();
 }

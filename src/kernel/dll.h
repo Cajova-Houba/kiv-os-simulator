@@ -51,7 +51,7 @@ public:
 		return m_handle != nullptr;
 	}
 
-	operator bool() const
+	explicit operator bool() const
 	{
 		return isLoaded();
 	}

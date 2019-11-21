@@ -2,6 +2,7 @@
 #include <windows.h>
 
 #include "../api/hal.h"
+
 #include "cmos.h"
 #include "idt.h"
 #include "keyboard.h"
@@ -54,7 +55,6 @@ int main()
 	// v tuto chvíli DLLMain v kernel.dll měla nahrát na NInterrupt::Bootstrap_Loader adresu vstupní funkce jádra
 	// takže ji spustíme
 	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Bootstrap_Loader, context);
-	// FIXME: pokud kernel.dll z nějakého důvodu neumístí zmíněnou funkci na dané místo, tak zde dojde k pádu celé aplikace
 
 	// a až simulovaný OS skončí, uvolníme zdroje z paměti
 	FreeLibrary(kernel);

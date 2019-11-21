@@ -1,13 +1,12 @@
 #include "syscall.h"
 #include "kernel.h"
-#include "thread.h"
 #include "process.h"
 #include "pipe.h"
 
 static EStatus OpenFile(Path && path, uint16_t attributes, HandleReference & result)
 {
 	const bool wantsDirectory = attributes & FileAttributes::DIRECTORY;
-	const bool wantsReadOnly = attributes & FileAttributes::READ_ONLY;
+	const bool wantsReadOnly  = attributes & FileAttributes::READ_ONLY;
 
 	FileInfo info;
 	EStatus status = Kernel::GetFileSystem().query(path, &info);
@@ -65,11 +64,7 @@ static EStatus Open(const char *pathString, uint8_t flags, uint16_t attributes, 
 {
 	bool wantsOpenAlways = flags & static_cast<uint8_t>(kiv_os::NOpen_File::fmOpen_Always);
 
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
+	Process & currentProcess = Thread::GetProcess();
 
 	Path path = Path::Parse(pathString);
 	if (!path)
@@ -79,7 +74,7 @@ static EStatus Open(const char *pathString, uint8_t flags, uint16_t attributes, 
 
 	if (!path.isAbsolute())
 	{
-		pCurrentProcess->makePathAbsolute(path);
+		currentProcess.makePathAbsolute(path);
 	}
 
 	HandleReference handle;
@@ -113,7 +108,7 @@ static EStatus Open(const char *pathString, uint8_t flags, uint16_t attributes, 
 
 	result = handle.getID();
 
-	pCurrentProcess->addHandle(std::move(handle));
+	currentProcess.addHandle(std::move(handle));
 
 	return EStatus::SUCCESS;
 }
@@ -125,13 +120,7 @@ static EStatus Write(HandleID id, const char *buffer, size_t bufferSize, size_t 
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
-
-	HandleReference handle = pCurrentProcess->getHandleOfType(id, EHandle::FILE);
+	HandleReference handle = Thread::GetProcess().getHandleOfType(id, EHandle::FILE);
 	if (!handle)
 	{
 		return EStatus::INVALID_ARGUMENT;
@@ -147,13 +136,7 @@ static EStatus Read(HandleID id, char *buffer, size_t bufferSize, size_t & read)
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
-
-	HandleReference handle = pCurrentProcess->getHandleOfType(id, EHandle::FILE);
+	HandleReference handle = Thread::GetProcess().getHandleOfType(id, EHandle::FILE);
 	if (!handle)
 	{
 		return EStatus::INVALID_ARGUMENT;
@@ -164,13 +147,7 @@ static EStatus Read(HandleID id, char *buffer, size_t bufferSize, size_t & read)
 
 static EStatus Seek(HandleID id, uint16_t type, int64_t offset, uint64_t & result)
 {
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
-
-	HandleReference handle = pCurrentProcess->getHandleOfType(id, EHandle::FILE);
+	HandleReference handle = Thread::GetProcess().getHandleOfType(id, EHandle::FILE);
 	if (!handle || handle.as<IFileHandle>()->getFileHandleType() != EFileHandle::REGULAR_FILE)
 	{
 		return EStatus::INVALID_ARGUMENT;
@@ -184,13 +161,9 @@ static EStatus Seek(HandleID id, uint16_t type, int64_t offset, uint64_t & resul
 
 static EStatus Close(HandleID id)
 {
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
+	Process & currentProcess = Thread::GetProcess();
 
-	HandleReference handle = pCurrentProcess->getHandle(id);
+	HandleReference handle = currentProcess.getHandle(id);
 	if (!handle)
 	{
 		// daný handle neexistuje nebo k němu proces nemá přístup
@@ -202,19 +175,13 @@ static EStatus Close(HandleID id)
 		handle.as<IFileHandle>()->close();
 	}
 
-	pCurrentProcess->removeHandle(id);
+	currentProcess.removeHandle(id);
 
 	return EStatus::SUCCESS;
 }
 
 static EStatus Delete(const char *pathString)
 {
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
-
 	Path path = Path::Parse(pathString);
 	if (!path)
 	{
@@ -223,7 +190,7 @@ static EStatus Delete(const char *pathString)
 
 	if (!path.isAbsolute())
 	{
-		pCurrentProcess->makePathAbsolute(path);
+		Thread::GetProcess().makePathAbsolute(path);
 	}
 
 	return Kernel::GetFileSystem().remove(path);
@@ -231,11 +198,7 @@ static EStatus Delete(const char *pathString)
 
 static EStatus SetWorkingDirectory(const char *pathString)
 {
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
+	Process & currentProcess = Thread::GetProcess();
 
 	Path path = Path::Parse(pathString);
 	if (!path)
@@ -245,7 +208,7 @@ static EStatus SetWorkingDirectory(const char *pathString)
 
 	if (!path.isAbsolute())
 	{
-		pCurrentProcess->makePathAbsolute(path);
+		currentProcess.makePathAbsolute(path);
 	}
 
 	FileInfo info;
@@ -260,7 +223,7 @@ static EStatus SetWorkingDirectory(const char *pathString)
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	pCurrentProcess->setWorkingDirectory(std::move(path));
+	currentProcess.setWorkingDirectory(std::move(path));
 
 	return EStatus::SUCCESS;
 }
@@ -272,24 +235,14 @@ static EStatus GetWorkingDirectory(char *buffer, size_t bufferSize, size_t & len
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
-
-	length = pCurrentProcess->getWorkingDirectoryStringBuffer(buffer, bufferSize);
+	length = Thread::GetProcess().getWorkingDirectoryStringBuffer(buffer, bufferSize);
 
 	return EStatus::SUCCESS;
 }
 
 static EStatus CreatePipe(HandleID *pipe)
 {
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
+	Process & currentProcess = Thread::GetProcess();
 
 	HandleReference readEnd;
 	HandleReference writeEnd;
@@ -301,8 +254,8 @@ static EStatus CreatePipe(HandleID *pipe)
 	pipe[0] = writeEnd.getID();
 	pipe[1] = readEnd.getID();
 
-	pCurrentProcess->addHandle(std::move(readEnd));
-	pCurrentProcess->addHandle(std::move(writeEnd));
+	currentProcess.addHandle(std::move(readEnd));
+	currentProcess.addHandle(std::move(writeEnd));
 
 	return EStatus::SUCCESS;
 }

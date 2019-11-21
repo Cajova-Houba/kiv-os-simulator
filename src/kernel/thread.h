@@ -7,6 +7,8 @@
 
 #include "handle_reference.h"
 
+using TEntryFunc = size_t (__stdcall *)(const kiv_hal::TRegisters & context);  // kiv_os::TThread_Proc
+
 class Process;
 
 class Thread : public IHandle
@@ -15,11 +17,11 @@ class Thread : public IHandle
 	std::atomic<int> m_exitCode;
 	std::atomic<bool> m_isRunning;
 	std::atomic<uint32_t> m_pendingSignals;
-	kiv_os::TThread_Proc m_signalHandler;
+	TEntryFunc m_signalHandler;
 	uint32_t m_signalMask;
 
 	// vstupní bod vlákna
-	static void Start(kiv_os::TThread_Proc entry, kiv_hal::TRegisters context, HandleID threadID, HandleID processID);
+	static void Start(TEntryFunc entry, kiv_hal::TRegisters context, HandleID threadID, HandleID processID);
 
 	friend class Process;
 
@@ -47,16 +49,18 @@ public:
 	}
 
 	// vytvoří nové vlákno
-	static HandleReference Create(kiv_os::TThread_Proc entry, const kiv_hal::TRegisters & context, HandleID processID);
+	static HandleReference Create(TEntryFunc entry, const kiv_hal::TRegisters & context, HandleID processID);
 
-	static Thread *Get();
+	static bool HasContext();
+
+	static Thread & Get();
 	static HandleID GetID();
 
-	static Process *GetProcess();
+	static Process & GetProcess();
 	static HandleID GetProcessID();
 
 	static void SetExitCode(int exitCode);
-	static void SetSignalHandler(kiv_os::TThread_Proc handler);
+	static void SetSignalHandler(TEntryFunc handler);
 	static void SetSignalEnabled(kiv_os::NSignal_Id signal, bool isEnabled);
 	static void HandleSignals();
 };

@@ -2,76 +2,46 @@
 
 #include "event_system.h"
 #include "process.h"
-#include "thread.h"
 
-static int CheckHandle(const HandleReference & handle, int events)
+static bool ValidateHandles(const HandleID *handles, uint16_t handleCount, int events, int & result)
 {
-	switch (handle->getHandleType())
+	auto callback = [&](HandleID, const HandleReference & handle, size_t index) -> bool
 	{
-		case EHandle::THREAD:
-		{
-			if (handle.as<Thread>()->isRunning())
-			{
-				if (events & Event::THREAD_START)
-				{
-					return 1;
-				}
-			}
-			else
-			{
-				if (events & Event::THREAD_END)
-				{
-					return 1;
-				}
-			}
-			break;
-		}
-		case EHandle::PROCESS:
-		{
-			if (handle.as<Process>()->isRunning())
-			{
-				if (events & Event::PROCESS_START)
-				{
-					return 1;
-				}
-			}
-			else
-			{
-				if (events & Event::PROCESS_END)
-				{
-					return 1;
-				}
-			}
-			break;
-		}
-		default:
-		{
-			return -1;  // na tento typ handle se nedá čekat
-		}
-	}
+		int currentEvent = 0;
 
-	return 0;  // je potřeba čekat
-}
-
-static bool ValidateHandles(const HandleID *handles, uint16_t handleCount, int events, Process *pCurrentProcess, int & result)
-{
-	return pCurrentProcess->forEachHandle(handles, handleCount,
-		[&](HandleID, const HandleReference & handle, size_t index) -> bool
+		switch (handle->getHandleType())
 		{
-			int status = CheckHandle(handle, events);
-			if (status != 0)
+			case EHandle::THREAD:
 			{
-				if (status > 0)
-				{
-					result = static_cast<int>(index);
-				}
-
-				return false;  // konec validace
+				currentEvent = (handle.as<Thread>()->isRunning()) ? Event::THREAD_START : Event::THREAD_END;
+				break;
 			}
-
-			return true;  // pokračujeme ve validaci
+			case EHandle::PROCESS:
+			{
+				currentEvent = (handle.as<Process>()->isRunning()) ? Event::PROCESS_START : Event::PROCESS_END;
+				break;
+			}
+			default:
+			{
+				// na tento typ handle se nedá čekat
+				// konec validace
+				return false;
+			}
 		}
-	);
+
+		if (currentEvent & events)
+		{
+			// na daném handle už došlo k některé z požadovaných událostí
+			result = static_cast<int>(index);
+			// konec validace
+			return false;
+		}
+
+		// pokračujeme ve validaci
+		return true;
+	};
+
+	return Thread::GetProcess().forEachHandle(handles, handleCount, callback);
 }
 
 struct EventSystem::WaitInfo
@@ -90,18 +60,11 @@ EStatus EventSystem::waitForMultiple(const HandleID *handles, uint16_t handleCou
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	Process *pCurrentProcess = Thread::GetProcess();
-	if (!pCurrentProcess)
-	{
-		return EStatus::UNRECOGNIZED_THREAD;
-	}
-
 	// během kontroly jednotlivých handle je potřeba pozdržet všechny příchozí události, aby se předešlo race condition
 	std::unique_lock<std::mutex> lock(m_mutex);
 
 	int validateResult = -1;
-
-	if (!ValidateHandles(handles, handleCount, events, pCurrentProcess, validateResult))
+	if (!ValidateHandles(handles, handleCount, events, validateResult))
 	{
 		if (validateResult < 0)
 		{
@@ -112,6 +75,7 @@ EStatus EventSystem::waitForMultiple(const HandleID *handles, uint16_t handleCou
 		{
 			// na nějaký handle už není potřeba čekat, protože na něm už došlo k některé z požadovaných událostí
 			result = static_cast<uint16_t>(validateResult);
+
 			return EStatus::SUCCESS;
 		}
 	}

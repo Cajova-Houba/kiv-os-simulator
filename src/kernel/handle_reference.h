@@ -34,6 +34,8 @@ public:
 	{
 		if (this != &other)
 		{
+			release();
+
 			m_id = other.m_id;
 			m_pHandle = other.m_pHandle;
 
@@ -65,7 +67,7 @@ public:
 		return m_id && m_pHandle;
 	}
 
-	operator bool() const
+	explicit operator bool() const
 	{
 		return isValid();
 	}

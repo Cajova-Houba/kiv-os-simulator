@@ -76,6 +76,7 @@ static int HALReadLine(char *buffer, size_t bufferSize)
 			{
 				buffer[length++] = '\n';
 				HALWriteChar('\n');
+
 				return static_cast<int>(length);
 			}
 			default:
@@ -99,10 +100,13 @@ EStatus Console::read(char *buffer, size_t bufferSize, size_t *pRead)
 
 	std::lock_guard<std::mutex> lock(m_mutex);
 
+	EStatus status = EStatus::SUCCESS;
+
 	int length = HALReadLine(buffer, bufferSize);
 	if (length < 0)
 	{
-		return EStatus::IO_ERROR;
+		length = 0;
+		status = EStatus::IO_ERROR;
 	}
 
 	if (pRead)
@@ -110,7 +114,7 @@ EStatus Console::read(char *buffer, size_t bufferSize, size_t *pRead)
 		(*pRead) = length;
 	}
 
-	return EStatus::SUCCESS;
+	return status;
 }
 
 EStatus Console::write(const char *buffer, size_t bufferSize, size_t *pWritten)

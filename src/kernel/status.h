@@ -13,7 +13,5 @@ enum struct EStatus : uint16_t  // kiv_os::NOS_Error
 	PERMISSION_DENIED,
 	IO_ERROR,
 
-	UNRECOGNIZED_THREAD = 0xA000,  // syscall spuštěn z neznámého vlákna
-
 	UNKNOWN_ERROR = 0xFFFF
 };

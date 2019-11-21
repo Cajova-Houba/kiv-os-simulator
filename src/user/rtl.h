@@ -60,16 +60,16 @@ namespace RTL
 
 	struct ProcessEnvironment
 	{
-		Handle stdIn        = 0;
-		Handle stdOut       = 0;
+		Handle stdIn = 0;
+		Handle stdOut = 0;
 		const char *cmdLine = "";
 	};
 
 	struct ThreadEnvironment
 	{
-		Error lastError             = Error::SUCCESS;
+		Error lastError = Error::SUCCESS;
 		SignalHandler signalHandler = nullptr;
-		uint32_t signalMask         = 0;
+		uint32_t signalMask = 0;
 
 		// informace o procesu ve kterém je vlákno spuštěno
 		ProcessEnvironment process;
@@ -138,7 +138,7 @@ namespace RTL
 	struct Process
 	{
 		Handle handle = 0;
-		Handle stdIn  = 0;
+		Handle stdIn = 0;
 		Handle stdOut = 0;
 		std::string name;
 		std::string cmdLine;
@@ -181,9 +181,9 @@ namespace RTL
 
 	struct Thread
 	{
-		Handle handle       = 0;
+		Handle handle = 0;
 		ThreadMain mainFunc = nullptr;
-		void *param         = nullptr;
+		void *param = nullptr;
 
 		~Thread()
 		{
@@ -510,10 +510,9 @@ namespace RTL
 	 * @brief Získá aktuální pozici v souboru.
 	 * @param file Handle na soubor.
 	 * @param result Proměnná pro uložení hodnoty pozice.
-	 * @param base Referenční bod pozice v souboru (RTL::Position::BEGIN nebo RTL::Position::END).
 	 * @return Pokud vše proběhlo v pořádku, tak true, jinak false. Chybový kód je možné získat pomocí RTL::GetLastError.
 	 */
-	bool GetFilePos(Handle file, int64_t & result, Position base = Position::BEGIN);
+	bool GetFilePos(Handle file, int64_t & result);
 
 	/**
 	 * @brief Nastaví pozici v souboru.
@@ -609,7 +608,7 @@ namespace RTL
 			return handle != 0;
 		}
 
-		operator bool() const
+		explicit operator bool() const
 		{
 			return isOpen();
 		}
@@ -634,10 +633,10 @@ namespace RTL
 			return WriteFile(handle, string);
 		}
 
-		int64_t getPos(Position base = Position::BEGIN)
+		int64_t getPos()
 		{
 			int64_t result = 0;
-			GetFilePos(handle, result, base);
+			GetFilePos(handle, result);
 
 			return result;
 		}
@@ -712,7 +711,7 @@ namespace RTL
 			return handle != 0;
 		}
 
-		operator bool() const
+		explicit operator bool() const
 		{
 			return isOpen();
 		}
@@ -741,7 +740,7 @@ namespace RTL
 
 	struct Pipe
 	{
-		Handle readEnd  = 0;
+		Handle readEnd = 0;
 		Handle writeEnd = 0;
 
 		~Pipe()
@@ -765,7 +764,7 @@ namespace RTL
 			return isReadEndOpen() && isWriteEndOpen();
 		}
 
-		operator bool() const
+		explicit operator bool() const
 		{
 			return isOpen();
 		}

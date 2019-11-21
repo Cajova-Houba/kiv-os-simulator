@@ -134,7 +134,7 @@ public:
 
 		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		const size_t bytesToRead = pDAP->count * m_bytesPerSector;
+		const int64_t bytesToRead = pDAP->count * m_bytesPerSector;
 
 		m_diskImage.seekg(m_bytesPerSector * pDAP->lba_index, std::ios::beg);
 		m_diskImage.read(static_cast<char*>(pDAP->sectors), bytesToRead);
@@ -158,7 +158,7 @@ public:
 
 		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		const size_t bytesToWrite = pDAP->count * m_bytesPerSector;
+		const int64_t bytesToWrite = pDAP->count * m_bytesPerSector;
 
 		m_diskImage.seekg(m_bytesPerSector * pDAP->lba_index, std::ios::beg);
 		const auto before = m_diskImage.tellp();

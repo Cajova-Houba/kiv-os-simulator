@@ -3,7 +3,6 @@
 
 #include "procfs.h"
 #include "kernel.h"
-#include "thread.h"
 #include "process.h"
 #include "util.h"
 
@@ -43,7 +42,7 @@ static size_t CopyValue(const std::string & value, char *buffer, size_t bufferSi
 	return length;
 }
 
-static EStatus QueryProcessFile(const std::string & fileName, Process *pProcess, FileInfo *pInfo)
+static EStatus QueryProcessFile(const std::string & fileName, Process & process, FileInfo *pInfo)
 {
 	size_t i = 0;
 
@@ -57,22 +56,22 @@ static EStatus QueryProcessFile(const std::string & fileName, Process *pProcess,
 			{
 				case EProcessFile::COMMAND_LINE:
 				{
-					size = pProcess->getCmdLine().length() + 1;
+					size = process.getCmdLine().length() + 1;
 					break;
 				}
 				case EProcessFile::WORKING_DIRECTORY:
 				{
-					size = pProcess->getWorkingDirectoryString().length() + 1;
+					size = process.getWorkingDirectoryString().length() + 1;
 					break;
 				}
 				case EProcessFile::PROCESS_NAME:
 				{
-					size = pProcess->getName().length() + 1;
+					size = process.getName().length() + 1;
 					break;
 				}
 				case EProcessFile::THREAD_COUNT:
 				{
-					size = std::to_string(pProcess->getThreadCount()).length() + 1;
+					size = std::to_string(process.getThreadCount()).length() + 1;
 					break;
 				}
 			}
@@ -92,7 +91,7 @@ static EStatus QueryProcessFile(const std::string & fileName, Process *pProcess,
 	return EStatus::FILE_NOT_FOUND;
 }
 
-static EStatus ReadProcessFile(const std::string & fileName, Process *pProcess,
+static EStatus ReadProcessFile(const std::string & fileName, Process & process,
                                char *buffer, size_t size, uint64_t offset, size_t *pRead)
 {
 	size_t i = 0;
@@ -107,22 +106,22 @@ static EStatus ReadProcessFile(const std::string & fileName, Process *pProcess,
 			{
 				case EProcessFile::COMMAND_LINE:
 				{
-					length = CopyValue(pProcess->getCmdLine(), buffer, size, offset);
+					length = CopyValue(process.getCmdLine(), buffer, size, offset);
 					break;
 				}
 				case EProcessFile::WORKING_DIRECTORY:
 				{
-					length = CopyValue(pProcess->getWorkingDirectoryString(), buffer, size, offset);
+					length = CopyValue(process.getWorkingDirectoryString(), buffer, size, offset);
 					break;
 				}
 				case EProcessFile::PROCESS_NAME:
 				{
-					length = CopyValue(pProcess->getName(), buffer, size, offset);
+					length = CopyValue(process.getName(), buffer, size, offset);
 					break;
 				}
 				case EProcessFile::THREAD_COUNT:
 				{
-					length = CopyValue(std::to_string(pProcess->getThreadCount()), buffer, size, offset);
+					length = CopyValue(std::to_string(process.getThreadCount()), buffer, size, offset);
 					break;
 				}
 			}
@@ -179,9 +178,9 @@ EStatus ProcFS::query(const Path & path, FileInfo *pInfo)
 		{
 			if (path[0] == "self")
 			{
-				Process *pCurrentProcess = Thread::GetProcess();
+				Process & currentProcess = Thread::GetProcess();
 
-				return QueryProcessFile(path[1], pCurrentProcess, pInfo);
+				return QueryProcessFile(path[1], currentProcess, pInfo);
 			}
 			else
 			{
@@ -193,7 +192,7 @@ EStatus ProcFS::query(const Path & path, FileInfo *pInfo)
 					return EStatus::FILE_NOT_FOUND;
 				}
 
-				return QueryProcessFile(path[1], process.as<Process>(), pInfo);
+				return QueryProcessFile(path[1], *process.as<Process>(), pInfo);
 			}
 
 			break;
@@ -213,9 +212,9 @@ EStatus ProcFS::read(const Path & path, char *buffer, size_t bufferSize, uint64_
 	{
 		if (path[0] == "self")
 		{
-			Process *pCurrentProcess = Thread::GetProcess();
+			Process & currentProcess = Thread::GetProcess();
 
-			return ReadProcessFile(path[1], pCurrentProcess, buffer, bufferSize, offset, pRead);
+			return ReadProcessFile(path[1], currentProcess, buffer, bufferSize, offset, pRead);
 		}
 		else
 		{
@@ -224,7 +223,7 @@ EStatus ProcFS::read(const Path & path, char *buffer, size_t bufferSize, uint64_
 			HandleReference process = Kernel::GetHandleStorage().getHandle(processID);
 			if (process && process->getHandleType() == EHandle::PROCESS)
 			{
-				return ReadProcessFile(path[1], process.as<Process>(), buffer, bufferSize, offset, pRead);
+				return ReadProcessFile(path[1], *process.as<Process>(), buffer, bufferSize, offset, pRead);
 			}
 		}
 	}

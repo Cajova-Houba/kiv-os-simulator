@@ -4,11 +4,9 @@
 #include <atomic>
 #include <string>
 #include <set>
-#include <vector>
-
-#include "../api/api.h"
 
 #include "handle_reference.h"
+#include "thread.h"
 #include "path.h"
 
 class Process : public IHandle
@@ -131,16 +129,10 @@ public:
 		return true;
 	}
 
-	template<class Callback>
-	bool forEachHandle(const std::vector<HandleID> & handles, Callback callback)
-	{
-		return forEachHandle(handles.data(), handles.size(), callback);
-	}
-
 	void addHandle(HandleReference && handle);
 	void removeHandle(HandleID id);
 
 	// vytvoří nový proces
-	static HandleReference Create(const char *name, const char *cmdLine, Path && path, kiv_os::TThread_Proc entry,
+	static HandleReference Create(const char *name, const char *cmdLine, Path && path, TEntryFunc entry,
 	                              HandleReference && stdIn, HandleReference && stdOut, bool useCurrentThread = false);
 };

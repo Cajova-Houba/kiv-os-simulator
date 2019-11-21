@@ -1,5 +1,4 @@
 #include "process.h"
-#include "thread.h"
 #include "kernel.h"
 
 HandleReference Process::getMainThread()
@@ -92,7 +91,7 @@ void Process::removeHandle(HandleID id)
 	m_handles.erase(it);
 }
 
-HandleReference Process::Create(const char *name, const char *cmdLine, Path && path, kiv_os::TThread_Proc entry,
+HandleReference Process::Create(const char *name, const char *cmdLine, Path && path, TEntryFunc entry,
                                 HandleReference && stdIn, HandleReference && stdOut, bool useCurrentThread)
 {
 	HandleReference process = Kernel::GetHandleStorage().addHandle(std::make_unique<Process>());
@@ -101,25 +100,25 @@ HandleReference Process::Create(const char *name, const char *cmdLine, Path && p
 		return HandleReference();
 	}
 
-	Process *self = process.as<Process>();
+	Process & self = *process.as<Process>();
 
-	self->m_name = name;
-	self->m_cmdLine = cmdLine;
-	self->m_currentDirectory = std::move(path);
+	self.m_name = name;
+	self.m_cmdLine = cmdLine;
+	self.m_currentDirectory = std::move(path);
 
 	kiv_hal::TRegisters context;
 	context.rax.x = stdIn.getID();
 	context.rbx.x = stdOut.getID();
-	context.rdi.r = reinterpret_cast<uint64_t>(self->m_cmdLine.c_str());
+	context.rdi.r = reinterpret_cast<uint64_t>(self.m_cmdLine.c_str());
 
 	if (stdIn)
 	{
-		self->m_handles.insert(std::move(stdIn));
+		self.m_handles.insert(std::move(stdIn));
 	}
 
 	if (stdOut)
 	{
-		self->m_handles.insert(std::move(stdOut));
+		self.m_handles.insert(std::move(stdOut));
 	}
 
 	if (useCurrentThread)
@@ -130,14 +129,14 @@ HandleReference Process::Create(const char *name, const char *cmdLine, Path && p
 			return HandleReference();
 		}
 
-		self->m_mainThreadID = mainThread.getID();
-		self->m_handles.insert(std::move(mainThread));
+		self.m_mainThreadID = mainThread.getID();
+		self.m_handles.insert(std::move(mainThread));
 
-		Thread::Start(entry, context, self->m_mainThreadID, process.getID());
+		Thread::Start(entry, context, self.m_mainThreadID, process.getID());
 	}
 	else
 	{
-		std::lock_guard<std::mutex> lock(self->m_mutex);
+		std::lock_guard<std::mutex> lock(self.m_mutex);
 
 		HandleReference mainThread = Thread::Create(entry, context, process.getID());
 		if (!mainThread)
@@ -145,8 +144,8 @@ HandleReference Process::Create(const char *name, const char *cmdLine, Path && p
 			return HandleReference();
 		}
 
-		self->m_mainThreadID = mainThread.getID();
-		self->m_handles.insert(std::move(mainThread));
+		self.m_mainThreadID = mainThread.getID();
+		self.m_handles.insert(std::move(mainThread));
 	}
 
 	return process;
