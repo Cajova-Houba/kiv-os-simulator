@@ -52,3 +52,34 @@ exit
  - Zavaděč kernelu je implementovaný v `kernel.cpp.Bootstrap_Loader`
 
  - Kernel načítá shell (to implementujeme my) jako dynamickou knihovnu `user.dll` (viz `kernel.cpp:Initialize_Kernel()`).
+
+
+# TODO
+
+- [x] Boot
+  - [x] Refactoring
+- [ ] Kernel
+  - [x] Handle system
+  - [x] Procesy + vlákna + signály
+  - [x] Události (waitFor)
+  - [x] Roura
+  - [ ] File system
+    - [x] Jednotné API + syscally
+    - [x] procfs
+    - [ ] FAT
+- [ ] User-space
+  - [x] RTL
+  - [ ] Shell
+  - [ ] Příkazy
+    - [ ] dir
+    - [x] echo
+    - [ ] find
+    - [ ] freq
+    - [ ] md
+    - [ ] rd
+    - [ ] rgen
+    - [ ] shutdown
+    - [ ] sort
+    - [ ] tasklist
+    - [ ] type
+
