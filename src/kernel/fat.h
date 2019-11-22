@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <vector>
 #include "../api/hal.h"
+#include "../api/api.h"
 #include "fserrors.h"
 
 
@@ -16,19 +17,6 @@
 #define USABLE_CLUSTER_LEN      4
 #define SIGNATURE_LEN           9
 #define ALIGNED_BOOT_REC_SIZE   272
-
-/*
- * BAD_BYTE * BAD_SEQ_LEN at the start and end of the cluster => bad cluster.
- */
-#define BAD_BYTE                (char)0xFF
-#define BAD_SEQ_LEN             3
-
-// +<dir name> <start cluster of dir>
-#define DIR_PRINT_FORMAT        "+%s %d\n"
-
-// -<file name> <start cluster of file> <size>
-#define FILE_PRINT_FORMAT       "-%s %d %d\n"
-#define PATH_DELIMITER			"/\0"
 
 /*
  * Cluster where the root dir is.
@@ -72,8 +60,7 @@ typedef enum {
 typedef enum {
     FAT_UNUSED = INT32_MAX - 1,
     FAT_FILE_END = INT32_MAX - 2,
-    FAT_BAD_CLUSTERS = INT32_MAX -3,
-    FAT_DIRECTORY = INT32_MAX -4
+    FAT_BAD_CLUSTERS = INT32_MAX -3
 } Fat_special;
 
 /*
@@ -94,17 +81,35 @@ typedef struct{
  */
 typedef struct {
     char name[MAX_NAME_LEN];                    // File name, 8+3+'\0'
-    bool isFile;                                // Is file flag
+	uint8_t flags;								// file attributes
     uint32_t size;                              // Size of the file, 0 for directory
     int32_t start_cluster;                      // Start cluster
 } Directory;
 
+/**
+ * @brief Prevede logicky cluster (poradove cislo) souboru na realny.
+ *	Pokud je logCluster vetsi nez relany pocet souboru clusteru, bude vracen posledni.
+ */
+constexpr int32_t log_cl_to_real(const int32_t * fat, const int32_t startCluster, const int32_t logCluster) {
+	int32_t realCl = startCluster;
+	size_t i = 0;
+	for (i = 0; i < logCluster && fat[realCl] != FAT_FILE_END; i++)
+	{
+		realCl = fat[realCl];
+	}
+
+	return realCl;
+}
+
+constexpr uint8_t is_dir(const Directory & dir) {
+	return dir.flags & (uint8_t)kiv_os::NFile_Attributes::Directory;
+}
 
 constexpr int32_t find_last_file_cluster(const int32_t * fat, const int32_t startCluster)
 {
 	int32_t lastCluster = startCluster;
 
-	while (fat[lastCluster] != FAT_FILE_END && fat[lastCluster] != FAT_DIRECTORY) {
+	while (fat[lastCluster] != FAT_FILE_END) {
 		lastCluster = fat[lastCluster];
 	}
 	return lastCluster;
@@ -117,7 +122,7 @@ constexpr size_t bytes_per_cluster(const Boot_record& bootRecord) {
 constexpr size_t count_file_clusters(const int32_t* fat, const int32_t startCluster) {
 	size_t cnt = 1;
 	int32_t cl = startCluster;
-	while (fat[cl] != FAT_FILE_END && fat[cl] != FAT_DIRECTORY) {
+	while (fat[cl] != FAT_FILE_END) {
 		cnt++;
 		cl = fat[cl];
 	}
@@ -159,8 +164,12 @@ constexpr uint64_t sectors_to_read(const uint64_t startSector, const int byteOff
 /**
  * @brief Vrati maximalni mozny pocet itemu v adresari pro danou FAT.
  */
-constexpr size_t max_items_in_directory(const Boot_record& bootRecord) {
+constexpr size_t max_dir_items_in_cluster(const Boot_record& bootRecord) {
 	return bytes_per_cluster(bootRecord) / sizeof(Directory);
+}
+
+constexpr size_t max_items_in_dir(const size_t dirSizeBytes) {
+	return dirSizeBytes / sizeof(Directory);
 }
 
 /**
@@ -207,7 +216,7 @@ uint16_t load_fat(const std::uint8_t diskNumber, const Boot_record& bootRecord, 
  *	FsError::SUCCESS polozky nacteny.
  *	FsError::NOT_A_DIR pokud dir neni slozka.
  */
-uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest, const bool includeEmpty = false);
+uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & dir, std::vector<Directory>& dest, const bool includeEmpty = false);
 
 /**
  * @brief Precte obsah soboru do bufferu.
@@ -219,7 +228,7 @@ uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bo
  *	FsError::SUCCESS obsah souboru precten.
  *  FsError::NOT_A_FILE fileToRead neni soubor (ale adresar).
  */
-uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, const size_t bufferLen, const size_t offset = 0);
+uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, const size_t bufferLen, size_t & bytesRead, const size_t offset = 0);
 
 /**
  * @brief Zapise do existujiciho souboru data z bufferu.
@@ -260,7 +269,7 @@ uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootReco
  *	FsError::SUCCESS pokud vse v poradku
  *	FsError::FILE_NOT_FOUND pokud nebyl fileToUpdate nalezen v rodicovskem adresari.
  */
-uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & parentDirectory, const std::string originalFileName, const Directory & fileToUpdate);
+uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & parentDirectory, const std::string originalFileName, const Directory & fileToUpdate);
 
 /**
  * Returns the first unused cluster found or NO_CLUSTER.
@@ -292,6 +301,7 @@ int get_data_position(Boot_record *boot_record);
  *	FsError::NOT_A_DIR pokud nejaky z prvku cesty (krome posledniho) neni adresar.
  */
 uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord,
+	const int32_t * fatTable,
 	const std::vector<std::string> & filePath,
 	Directory & foundFile, Directory & parentDirectory, uint32_t & matchCounter);
 

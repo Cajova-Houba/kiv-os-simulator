@@ -58,7 +58,7 @@ uint16_t init_fat(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters para
 
 	// inicializace FAT
 	fat_table.resize((size_t)fat_size);
-	fat_table[0] = FAT_DIRECTORY;
+	fat_table[0] = FAT_FILE_END;
 	for (i = 1; i < (size_t)fat_size; i++) {
 		fat_table[i] = FAT_UNUSED;
 	}
@@ -161,71 +161,68 @@ uint16_t load_fat(const std::uint8_t diskNumber, const Boot_record& bootRecord, 
 	return FsError::SUCCESS;
 }
 
-uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & dir, std::vector<Directory>& dest, const bool includeEmpty)
+uint16_t load_items_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & dir, std::vector<Directory>& dest, const bool includeEmpty)
 {
 	// kontrola, ze je vazne potreba cokoliv delat
-	if (dir.isFile) {
+	if (!is_dir(dir)) {
 		return FsError::NOT_A_DIR;
 	}
 
-	// nactu 1 cluster s adresarem
-	const size_t itemsInDirectory = max_items_in_directory(bootRecord);
-	size_t bufferLen = bootRecord.bytes_per_sector * bootRecord.cluster_size,
-		i = 0;
-	char* buffer = new char[bufferLen];
-	Directory * dirItems = nullptr;
+	uint16_t isError = 0;
 
-	uint16_t readRes = read_cluster_range(diskNumber, bootRecord, dir.start_cluster, 1, buffer, bufferLen);
-
-	if (readRes != FsError::SUCCESS) {
-		// chyba pri cteni z disku
-		delete[] buffer;
+	// nactu cely soubor s adresarem
+	Directory* dirItems = nullptr;
+	size_t i = 0;
+	const size_t dirClusterCount = count_file_clusters(fatTable, dir.start_cluster);
+	const size_t bufferSize = dirClusterCount * bootRecord.bytes_per_sector * bootRecord.cluster_size;
+	const size_t dirItemCount = bufferSize / sizeof(Directory);
+	size_t bytesRead = 0;
+	std::vector<char> dirBuffer(bufferSize, 0);
+	isError = read_file(diskNumber, bootRecord, fatTable, dir, &(dirBuffer[0]), dirBuffer.size(), bytesRead);
+	if (isError) {
 		return FsError::DISK_OPERATION_ERROR;
 	}
 
 	// zkopirovani itemu v adresari do dirItems
-	dirItems = (Directory *)buffer;
+	dirItems = (Directory *)&(dirBuffer[0]);
 
 	// vyber neprazdne polozky
-	for (i = 0; i < itemsInDirectory; i++) {
+	for (i = 0; i < dirItemCount; i++) {
 		if (includeEmpty || dirItems[i].name[0] != '\0') {
 			// bud chceme vse, nebo jen neprazdne polozky
 			dest.push_back(dirItems[i]);
 		} 
 	}
 
-	// uklid
-	delete[] buffer;
-
 	return FsError::SUCCESS;
 }
 
-uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, const size_t bufferLen, const size_t offset)
+uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t* fatTable, const Directory & fileToRead, char * buffer, const size_t bufferLen, size_t & bytesRead, const size_t offset)
 {
-	if (!fileToRead.isFile) {
-		return FsError::NOT_A_FILE;
-	}
-
 	// neni co cist
-	if (offset >= fileToRead.size || bufferLen == 0) {
+	if (bufferLen == 0) {
 		return FsError::SUCCESS;
 	}
 
     const size_t bytesPerCluster = bytes_per_cluster(bootRecord);
 
-	uint16_t res = FsError::UNKNOWN_ERROR,
-			isError = FsError::UNKNOWN_ERROR;
+	uint16_t isError = FsError::UNKNOWN_ERROR;
 	int32_t currentCluster = fileToRead.start_cluster;
 	std::vector<std::array<int32_t, 2>> chunks;
 	
 	size_t currBytesToRead = bytesPerCluster,
-		totalBytes = 0,
 		currOffset = 0,
 		i = 0;
 	bool bufferFull = false;
 
 	// od ktere casti ktereho clusteru budeme cist
 	currentCluster = get_cluster_by_offset(fatTable, fileToRead.start_cluster, offset, bytesPerCluster);
+	if (currentCluster == FAT_FILE_END) {
+		// offset je za koncem souboru => neni co cist
+		return FsError::SUCCESS;
+	}
+
+
 	currOffset = offset % bytesPerCluster;
 	currBytesToRead = bytesPerCluster - currOffset;
 
@@ -233,38 +230,33 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 	split_file_to_chunks(fatTable, currentCluster, chunks);
 
 	// ted nacitej po clusterech
+	bytesRead = 0;
 	for (i = 0; i < chunks.size() && !bufferFull; i++) {
 		// pokud uz je cilovy buffer plny a cely cluster se do nej nevejde,
 		// nacti jen to co muzes
 		currBytesToRead = chunks[i][1] * bytesPerCluster - currOffset;
-		if (totalBytes + currBytesToRead > bufferLen) {
-			currBytesToRead = bufferLen - totalBytes;
+		if (bytesRead + currBytesToRead > bufferLen) {
+			currBytesToRead = bufferLen - bytesRead;
 			bufferFull = true;
 		}
 
 		// nacti chunk do bufferu
-		isError = read_cluster_range(diskNumber, bootRecord, chunks[i][0], (uint32_t)chunks[i][1], &(buffer[totalBytes]), currBytesToRead, currOffset);
+		isError = read_cluster_range(diskNumber, bootRecord, chunks[i][0], (uint32_t)chunks[i][1], &(buffer[bytesRead]), currBytesToRead, currOffset);
 		if (isError) {
-			res = isError;
 			break;
 		}
-		totalBytes += currBytesToRead;
+		bytesRead += currBytesToRead;
 
 		// s offsetem cteme jen pri ctnei prvniho clusteru
 		currOffset = 0;
 	}
 
-	// uspesne jme vse precetli
-	if (currentCluster == FAT_FILE_END || bufferFull) {
-		res = FsError::SUCCESS;
-	} 
-
-	return res;
+	return isError;
 }
 
 uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, Directory & fileToWriteTo, const size_t offset, char * buffer, const size_t bufferLen)
 {
-	if (!fileToWriteTo.isFile) {
+	if (is_dir(fileToWriteTo)) {
 		return FsError::NOT_A_FILE;
 	}
 
@@ -407,7 +399,7 @@ uint16_t delete_file(const std::uint8_t diskNumber, const Boot_record & bootReco
 	// update itemu v adresari
 	memset(&fileToDelete, 0, sizeof(Directory));
 
-	isError = update_file_in_dir(diskNumber, bootRecord, parentDirectory, origFileName, fileToDelete);
+	isError = update_file_in_dir(diskNumber, bootRecord, fatTable, parentDirectory, origFileName, fileToDelete);
 	if (isError) {
 		return isError;
 	}
@@ -450,14 +442,11 @@ uint16_t allocate_clusters(const Boot_record & bootRecord, int32_t * fatTable, c
 
 uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, const Directory & parentDirectory, Directory & newFile)
 {
-	const size_t maxItemsInDir = max_items_in_directory(bootRecord);
-	const size_t bytesPerCluster = bytes_per_cluster(bootRecord);
+	const int32_t dirLastCluster = find_last_file_cluster(fatTable, parentDirectory.start_cluster);
 
 	int16_t isError;
-	std::vector<Directory> itemsInParentDir;
 	int32_t nextFreeCluster = 0;
-	char *dirBuffer;
-	int dirPosition = 0;
+	std::vector<char> dirClusterBuffer(bytes_per_cluster(bootRecord), 0);
 
 	// zjistit jestli je misto ve FAT
 	nextFreeCluster = get_free_cluster(fatTable, bootRecord.usable_cluster_count);
@@ -468,72 +457,96 @@ uint16_t create_file(const std::uint8_t diskNumber, const Boot_record & bootReco
 	// vytvorit soubor
 	newFile.start_cluster = nextFreeCluster;
 	newFile.size = 0;
+	fatTable[newFile.start_cluster] = FAT_FILE_END;
 	
-	// buffer na adresar veliksoti 1 clusteru
-	dirBuffer = new char[bytesPerCluster];
-	isError = read_cluster_range(diskNumber, bootRecord, parentDirectory.start_cluster, 1, dirBuffer, bytesPerCluster);
-	if (isError) {
-		delete[] dirBuffer;
+	// zavolat update s puvodnim jmenem '\0'
+	// pokud bude file not found => rodicovsky adresar je plny
+	isError = update_file_in_dir(diskNumber, bootRecord, fatTable, parentDirectory, "\0", newFile);
+	if (isError == FsError::FILE_NOT_FOUND) {
+		// adresar je plny => alokovat novy cluster
+		nextFreeCluster = get_free_cluster(fatTable, bootRecord.usable_cluster_count);
+		if (nextFreeCluster == NO_CLUSTER) {
+			return FsError::FULL_DISK;
+		}
+
+		fatTable[dirLastCluster] = nextFreeCluster;
+		fatTable[nextFreeCluster] = FAT_FILE_END;
+
+		// prepsat novy dir cluster 0
+		isError = write_cluster_range(diskNumber, bootRecord, nextFreeCluster, 1, &(dirClusterBuffer[0]));
+		if (isError) {
+			return isError;
+		}
+
+		isError = update_file_in_dir(diskNumber, bootRecord, fatTable, parentDirectory, "\0", newFile);
+		if (isError) {
+			// zase nejaka chyba, tady uz je neocekavana
+			return isError;
+		}
+	}
+	else if (isError != FsError::SUCCESS) {
 		return isError;
 	}
 
-	// zjistit jestli je misto v adresari
-	dirPosition = get_free_dir_item_in_cluster(dirBuffer, maxItemsInDir);
-	if (dirPosition < 0) {
-		delete[] dirBuffer;
-		return FsError::FULL_DIR;
-	}
+	// prepat cluter noveho ouboru 0
+	isError = write_cluster_range(diskNumber, bootRecord, newFile.start_cluster, 1, &(dirClusterBuffer[0]));
 
-	// vlozit novy soubor do clusteru a zapsat novy cluster pro soubor
-	memcpy(&(dirBuffer[dirPosition * sizeof(Directory)]), &newFile, sizeof(Directory));
-	write_cluster_range(diskNumber, bootRecord, parentDirectory.start_cluster, 1, dirBuffer);
-
-	memset(dirBuffer, 0, bytesPerCluster);
-	write_cluster_range(diskNumber, bootRecord, newFile.start_cluster, 1, dirBuffer);
-	delete[] dirBuffer;
-
-	// update FAT
-	fatTable[newFile.start_cluster] = newFile.isFile ? FAT_FILE_END : FAT_DIRECTORY;
+	// zapis update FAT
 	return update_fat(diskNumber, bootRecord, fatTable);
 }
 
-uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const Directory & parentDirectory, const std::string originalFileName, const Directory & fileToUpdate)
+uint16_t update_file_in_dir(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const Directory & parentDirectory, const std::string originalFileName, const Directory & fileToUpdate)
 {
-	const std::string fName(fileToUpdate.name);
 	const size_t clusterSize = bytes_per_cluster(bootRecord);
-	const size_t maxItemsInDir = max_items_in_directory(bootRecord);
+	const size_t dirClusters = count_file_clusters(fatTable, parentDirectory.start_cluster);
+	const size_t maxItemsInDir = (clusterSize * dirClusters) / sizeof(Directory);
 	Directory * dirItems;
 	uint16_t isError = 0;
-	char *clusterBuffer;
+	std::vector<char> dirBuffer(clusterSize*dirClusters, 0);
 	size_t i = 0;
+	size_t offset = 0;
+	int32_t c1, c2;
 
-	// update itemu
-	clusterBuffer = new char[bytes_per_cluster(bootRecord)];
-	isError = read_cluster_range(diskNumber, bootRecord, parentDirectory.start_cluster, 1, clusterBuffer, clusterSize);
+	// nacti cely adresar
+	isError = read_file(diskNumber, bootRecord, fatTable, parentDirectory, &(dirBuffer[0]), dirBuffer.size(), offset);
 	if (isError) {
-		delete[] clusterBuffer;
 		return isError;
 	}
 
 	// najdi item v adresari
-	dirItems = (Directory *)clusterBuffer;
+	offset = 0;
+	dirItems = (Directory *)&(dirBuffer[0]);
 	for (i = 0; i < maxItemsInDir; i++) {
 		if (originalFileName.compare(dirItems[i].name) == 0) {
 			break;
 		}
+		offset += sizeof(Directory);
 	}
 
 	// je item v adresari?
 	if (i == maxItemsInDir) {
-		delete[] clusterBuffer;
 		return FsError::FILE_NOT_FOUND;
 	}
 
 	// update itemu
-	memcpy(&(clusterBuffer[i * sizeof(Directory)]), &fileToUpdate, sizeof(Directory));
+	memcpy(&(dirBuffer[i * sizeof(Directory)]), &fileToUpdate, sizeof(Directory));
 
-	isError = write_cluster_range(diskNumber, bootRecord, parentDirectory.start_cluster, 1, clusterBuffer);
-	delete[] clusterBuffer;
+	// podle offsetu pozname ktery cluster zapsat
+	// directory k update je ve stejném clusteru
+	c1 = (int32_t)(offset / clusterSize);
+	c2 = (int32_t)((offset + sizeof(Directory) - 1) / clusterSize);
+	if (c1 == c2) {
+		// cely dir item k updatu je v 1 clusteru
+		isError = write_cluster_range(diskNumber, bootRecord, log_cl_to_real(fatTable, parentDirectory.start_cluster, c1), 1, &(dirBuffer[c1*clusterSize]));
+	}
+	else {
+		// dir je ve dvou ruznych clusterech -> musime prepsat oba
+		isError = write_cluster_range(diskNumber, bootRecord, log_cl_to_real(fatTable, parentDirectory.start_cluster, c1), 1, &(dirBuffer[c1*clusterSize]));
+		if (isError) {
+			return isError;
+		}
+		isError = write_cluster_range(diskNumber, bootRecord, log_cl_to_real(fatTable, parentDirectory.start_cluster, c2), 1, &(dirBuffer[c2*clusterSize]));
+	}
 
 	return isError;
 }
@@ -557,12 +570,12 @@ int get_data_position(Boot_record *boot_record) {
 	return sizeof(Boot_record) + sizeof(int32_t)*boot_record->usable_cluster_count*boot_record->fat_copies;
 }
 
-uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const std::vector<std::string>& filePath, Directory & foundFile, Directory & parentDirectory, uint32_t & matchCounter)
+uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t * fatTable, const std::vector<std::string>& filePath, Directory & foundFile, Directory & parentDirectory, uint32_t & matchCounter)
 {
 	// pokud neni zadna cesta, vrat root
 	if (filePath.empty()) {
 		matchCounter = 0;
-		foundFile.isFile = false;
+		foundFile.flags = (uint8_t)kiv_os::NFile_Attributes::Directory;
 		foundFile.start_cluster = ROOT_CLUSTER;
 		return FsError::SUCCESS;
 	}
@@ -577,9 +590,9 @@ uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 
 	// nacti obsah rootu
 	parentDirectory.start_cluster = ROOT_CLUSTER;
-	parentDirectory.isFile = false;
+	parentDirectory.flags = (uint8_t)kiv_os::NFile_Attributes::Directory;
 	parentDirectory.name[0] = '\0';
-	opRes = load_items_in_dir(diskNumber, bootRecord, parentDirectory, dirItems);
+	opRes = load_items_in_dir(diskNumber, bootRecord, fatTable, parentDirectory, dirItems);
 	if (opRes != FsError::SUCCESS) {
 		return opRes;
 	}
@@ -600,7 +613,7 @@ uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 				matchCounter++;
 				break;
 			}
-			else if (currPathItem < filePath.size() - 1 && dirItems[i].isFile) {
+			else if (currPathItem < filePath.size() - 1 && !is_dir(dirItems[i])) {
 				// jeste nejsme na konci cesty, ale byl nalezen file misto adresare
 				searchForFile = false;
 				res = FsError::NOT_A_DIR;
@@ -613,7 +626,7 @@ uint16_t find_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 				currPathItem++;
 				copy_dir(parentDirectory, dirItems[i]);
 				dirItems.clear();
-				opRes = load_items_in_dir(diskNumber, bootRecord, parentDirectory, dirItems);
+				opRes = load_items_in_dir(diskNumber, bootRecord, fatTable, parentDirectory, dirItems);
 				if (opRes != FsError::SUCCESS) {
 					searchForFile = false;
 					res = opRes;
@@ -681,7 +694,7 @@ void split_file_to_chunks(const int32_t* fatTable, const int32_t startCluster, s
 		chunkStart = startCluster,
 		chunkSize = 1;
 
-	while (currCluster != FAT_FILE_END && currCluster != FAT_DIRECTORY) {
+	while (currCluster != FAT_FILE_END) {
 		currCluster = fatTable[currCluster];
 		if (currCluster - prevCluster == 1 && chunkSize != 1000 ) {
 			// predchozi cluster je tesne pred soucasnym, pokracuj v chunku

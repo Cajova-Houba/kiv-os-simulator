@@ -113,5 +113,18 @@ namespace Filesystem {
 	 */
 	uint16_t LoadDiskParameters(const std::uint8_t diskNumber, kiv_hal::TDrive_Parameters & parameters);
 
-	uint16_t _CreateFileInternal(std::uint8_t diskNumber, const std::string dirName, const bool isFile);
+	/**
+	 * @brief Zjisti, jestli zadany soubor existuje.
+	 * 
+	 * @param fileName Absolutni cesta k souboru.
+	 */
+	uint16_t FileExists(const std::uint8_t diskNumber, const std::string fileName);
+
+	/**
+	 * @brief Vrati cislo disku odpovidajici danemu identifikatoru (C -> 0x80, D -> 0x81, ...)
+	 *
+	 * @param diskIdentifier Jednoznakovy identifikator disku.
+	 */
+	uint8_t ResolveDiskNumber(const char diskIdentifier);
 }
+

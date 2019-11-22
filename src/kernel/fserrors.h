@@ -1,6 +1,7 @@
 // TODO: tento soubor odstranit
 #pragma once
 #include <cstdint>
+#include "status.h"
 
 enum FsError : uint16_t {
 	SUCCESS = 0,
@@ -17,3 +18,35 @@ enum FsError : uint16_t {
 
 	UNKNOWN_ERROR = 0xFFFF
 };
+
+
+static EStatus FsErrorToStatus(uint16_t err) {
+	switch (err)
+	{
+	case SUCCESS:
+		return EStatus::SUCCESS;
+
+	case NOT_A_DIR:
+	case NOT_A_FILE:
+	case FILE_ALREADY_EXISTS:
+	case FILE_NAME_TOO_LONG:
+		return EStatus::INVALID_ARGUMENT;
+
+	case FILE_NOT_FOUND:
+		return EStatus::FILE_NOT_FOUND;
+
+	case FULL_DISK:
+	case FULL_DIR:
+		return EStatus::NOT_ENOUGH_DISK_SPACE;
+
+	case NO_FILE_SYSTEM:
+	case DISK_OPERATION_ERROR:
+	case INCOMPATIBLE_DISK:
+		return EStatus::IO_ERROR;
+
+	case UNKNOWN_ERROR:
+	default:
+		return EStatus::UNKNOWN_ERROR;
+		break;
+	}
+}
