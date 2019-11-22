@@ -2,7 +2,7 @@
 
 void HandleStorage::removeRef(HandleID id)
 {
-	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	std::unique_lock<std::mutex> lock(m_mutex);
 
 	auto it = m_handles.find(id);
 	if (it == m_handles.end())
@@ -12,10 +12,18 @@ void HandleStorage::removeRef(HandleID id)
 
 	it->second.refCount--;
 
+	std::unique_ptr<IHandle> handle;
+
 	if (it->second.refCount == 0)
 	{
+		handle = std::move(it->second.handle);
 		m_handles.erase(it);
 	}
+
+	lock.unlock();
+
+	// zde se zavolá destruktor handle
+	handle.reset();
 }
 
 HandleReference HandleStorage::addHandle(std::unique_ptr<IHandle> && handle)
@@ -25,7 +33,7 @@ HandleReference HandleStorage::addHandle(std::unique_ptr<IHandle> && handle)
 		return HandleReference();
 	}
 
-	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 
 	if (m_handles.size() == MAX_HANDLE_COUNT)
 	{
@@ -54,7 +62,7 @@ HandleReference HandleStorage::getHandle(HandleID id)
 		return HandleReference();
 	}
 
-	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 
 	auto it = m_handles.find(id);
 	if (it == m_handles.end())
@@ -74,7 +82,7 @@ HandleReference HandleStorage::getHandleOfType(HandleID id, EHandle type)
 		return HandleReference();
 	}
 
-	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 
 	auto it = m_handles.find(id);
 	if (it == m_handles.end() || it->second.handle->getHandleType() != type)
@@ -94,7 +102,7 @@ bool HandleStorage::hasHandle(HandleID id)
 		return false;
 	}
 
-	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 
 	auto it = m_handles.find(id);
 	if (it == m_handles.end())
@@ -112,7 +120,7 @@ bool HandleStorage::hasHandleOfType(HandleID id, EHandle type)
 		return false;
 	}
 
-	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 
 	auto it = m_handles.find(id);
 	if (it == m_handles.end() || it->second.handle->getHandleType() != type)
@@ -125,7 +133,7 @@ bool HandleStorage::hasHandleOfType(HandleID id, EHandle type)
 
 size_t HandleStorage::getHandleCount()
 {
-	std::lock_guard<std::recursive_mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 
 	return m_handles.size();
 }

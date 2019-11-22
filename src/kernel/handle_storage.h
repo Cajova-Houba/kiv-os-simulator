@@ -16,7 +16,7 @@ class HandleStorage
 	};
 
 	std::map<HandleID, HandleData> m_handles;
-	std::recursive_mutex m_mutex;
+	std::mutex m_mutex;
 	HandleID m_lastID;
 
 	void removeRef(HandleID id);
@@ -37,7 +37,7 @@ public:
 	template<class Predicate>
 	std::vector<HandleReference> getHandles(Predicate predicate)
 	{
-		std::lock_guard<std::recursive_mutex> lock(m_mutex);
+		std::lock_guard<std::mutex> lock(m_mutex);
 
 		std::vector<HandleReference> result;
 		for (auto it = m_handles.begin(); it != m_handles.end(); ++it)
