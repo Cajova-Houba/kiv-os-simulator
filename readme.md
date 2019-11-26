@@ -69,7 +69,7 @@ exit
     - [ ] FAT
 - [ ] User-space
   - [x] RTL
-  - [ ] Shell
+  - [x] Shell
   - [ ] Příkazy
     - [ ] dir
     - [x] echo
