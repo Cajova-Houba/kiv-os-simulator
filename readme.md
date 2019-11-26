@@ -71,7 +71,7 @@ exit
   - [x] RTL
   - [x] Shell
   - [ ] Příkazy
-    - [ ] dir
+    - [x] dir
     - [x] echo
     - [ ] find
     - [ ] freq
