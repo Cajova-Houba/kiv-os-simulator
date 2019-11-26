@@ -76,7 +76,7 @@ exit
     - [ ] find
     - [ ] freq
     - [x] md
-    - [ ] rd
+    - [x] rd
     - [ ] rgen
     - [ ] shutdown
     - [ ] sort
