@@ -6,19 +6,20 @@
 
 #include "../api/api.h"
 
-// =========================================================================================
+#include "compiler.h"
+#include "string_buffer.h"
+
+// ==========================================================================================================================
 #define RTL_DEFINE_SHELL_PROGRAM(NAME)\
 static int NAME##_main(const char *args);\
 extern "C" __declspec(dllexport) size_t __stdcall NAME(const kiv_hal::TRegisters & context)\
 {\
-	RTL::ThreadEnvironment *pEnv = RTL::GetCurrentThreadEnv();\
-	pEnv->process.stdIn   = static_cast<RTL::Handle>(context.rax.x);\
-	pEnv->process.stdOut  = static_cast<RTL::Handle>(context.rbx.x);\
-	pEnv->process.cmdLine = reinterpret_cast<const char*>(context.rdi.r);\
-	RTL::SetCurrentThreadExitCode(NAME##_main(RTL::GetProcessCmdLine()));\
+	RTL::ThreadEnvironmentGuard environment(context.rax.x, context.rbx.x, reinterpret_cast<const char*>(context.rdi.r));\
+	int exitCode = NAME##_main(RTL::GetProcessCmdLine());\
+	RTL::SetCurrentThreadExitCode(exitCode);\
 	return 0;\
 }
-// =========================================================================================
+// ==========================================================================================================================
 
 namespace RTL
 {
@@ -55,6 +56,14 @@ namespace RTL
 		TERMINATE = 15  // SIGTERM
 	};
 
+	namespace SignalBits
+	{
+		enum
+		{
+			TERMINATE = (1 << 14)
+		};
+	}
+
 	using ThreadMain = int (*)(void *param);
 	using SignalHandler = void (*)(Signal signal);
 
@@ -71,8 +80,18 @@ namespace RTL
 		SignalHandler signalHandler = nullptr;
 		uint32_t signalMask = 0;
 
+		ThreadMain mainFunc = nullptr;
+		void *param = nullptr;
+
 		// informace o procesu ve kterém je vlákno spuštěno
 		ProcessEnvironment process;
+	};
+
+	struct ThreadEnvironmentGuard
+	{
+		ThreadEnvironmentGuard(Handle stdIn, Handle stdOut, const char *cmdLine);
+		ThreadEnvironmentGuard(ThreadEnvironment *pThreadEnv);
+		~ThreadEnvironmentGuard();
 	};
 
 	/**
@@ -143,11 +162,59 @@ namespace RTL
 		std::string name;
 		std::string cmdLine;
 
+		Process() = default;
+
+		Process(const Process &) = delete;
+
+		Process(Process && other)
+		: handle(other.handle),
+		  stdIn(other.stdIn),
+		  stdOut(other.stdOut),
+		  name(std::move(other.name)),
+		  cmdLine(std::move(other.cmdLine))
+		{
+			other.handle = 0;
+			other.stdIn = 0;
+			other.stdOut = 0;
+			other.name.clear();
+			other.cmdLine.clear();
+		}
+
+		Process & operator=(const Process &) = delete;
+
+		Process & operator=(Process && other)
+		{
+			if (this != &other)
+			{
+				release();
+
+				handle = other.handle;
+				stdIn = other.stdIn;
+				stdOut = other.stdOut;
+				name = std::move(other.name);
+				cmdLine = std::move(other.cmdLine);
+
+				other.handle = 0;
+				other.stdIn = 0;
+				other.stdOut = 0;
+				other.name.clear();
+				other.cmdLine.clear();
+			}
+
+			return *this;
+		}
+
 		~Process()
 		{
-			if (isStarted())
+			release();
+		}
+
+		void release()
+		{
+			if (handle)
 			{
 				CloseHandle(handle);
+				handle = 0;
 			}
 		}
 
@@ -185,11 +252,51 @@ namespace RTL
 		ThreadMain mainFunc = nullptr;
 		void *param = nullptr;
 
+		Thread() = default;
+
+		Thread(const Thread &) = delete;
+
+		Thread(Thread && other)
+		: handle(other.handle),
+		  mainFunc(other.mainFunc),
+		  param(other.param)
+		{
+			other.handle = 0;
+			other.mainFunc = nullptr;
+			other.param = nullptr;
+		}
+
+		Thread & operator=(const Thread &) = delete;
+
+		Thread & operator=(Thread && other)
+		{
+			if (this != &other)
+			{
+				release();
+
+				handle = other.handle;
+				mainFunc = other.mainFunc;
+				param = other.param;
+
+				other.handle = 0;
+				other.mainFunc = nullptr;
+				other.param = nullptr;
+			}
+
+			return *this;
+		}
+
 		~Thread()
 		{
-			if (isStarted())
+			release();
+		}
+
+		void release()
+		{
+			if (handle)
 			{
 				CloseHandle(handle);
+				handle = 0;
 			}
 		}
 
@@ -320,7 +427,7 @@ namespace RTL
 	 * @brief Vrátí řetězec s popisem chybového kódu pro aktuální vlákno.
 	 * @return Textová reprezentace aktuálního chybového kódu.
 	 */
-	inline std::string GetLastErrorString()
+	inline std::string GetLastErrorMsg()
 	{
 		return ErrorToString(GetLastError());
 	}
@@ -350,6 +457,22 @@ namespace RTL
 		uint16_t attributes;  // FileAttributes
 		char name[62];        // řetězec ukončený nulou, reálné moderní OS používají většinou 240 až 256 znaků
 		// velikost celé struktury zarovnaná na 64 bajtů
+
+		DirectoryEntry()
+		{
+			attributes = 0;
+			name[0] = '\0';
+		}
+
+		bool isReadOnly() const
+		{
+			return attributes & FileAttributes::READ_ONLY;
+		}
+
+		bool isDirectory() const
+		{
+			return attributes & FileAttributes::DIRECTORY;
+		}
 	};
 
 	/**
@@ -449,22 +572,57 @@ namespace RTL
 	 * @brief Zapíše řetězec ukončený nulou do souboru.
 	 * @param file Deskriptor souboru.
 	 * @param string Řetězec k zapsání.
+	 * @param pWritten Volitelný ukazatel na proměnnou, kam se uloží počet zapsaných bajtů. Může být null.
 	 * @return Pokud vše proběhlo v pořádku, tak true, jinak false. Chybový kód je možné získat pomocí RTL::GetLastError.
 	 */
-	inline bool WriteFile(Handle file, const char *string)
+	inline bool WriteFile(Handle file, const char *string, size_t *pWritten = nullptr)
 	{
-		return WriteFile(file, string, std::strlen(string));
+		return WriteFile(file, string, std::strlen(string), pWritten);
 	}
 
 	/**
 	 * @brief Zapíše řetězec do souboru.
 	 * @param file Deskriptor souboru.
 	 * @param string Řetězec k zapsání.
+	 * @param pWritten Volitelný ukazatel na proměnnou, kam se uloží počet zapsaných bajtů. Může být null.
 	 * @return Pokud vše proběhlo v pořádku, tak true, jinak false. Chybový kód je možné získat pomocí RTL::GetLastError.
 	 */
-	inline bool WriteFile(Handle file, const std::string & string)
+	inline bool WriteFile(Handle file, const std::string & string, size_t *pWritten = nullptr)
 	{
-		return WriteFile(file, string.c_str(), string.length());
+		return WriteFile(file, string.c_str(), string.length(), pWritten);
+	}
+
+	template<size_t Size>
+	inline bool WriteFile(Handle file, const StringBuffer<Size> & buffer, size_t *pWritten = nullptr)
+	{
+		return WriteFile(file, buffer.get(), buffer.getLength(), pWritten);
+	}
+
+	bool WriteFileFormatV(Handle file, size_t *pWritten, const char *format, va_list args);
+
+	inline bool WriteFileFormatV(Handle file, const char *format, va_list args)
+	{
+		return WriteFileFormatV(file, nullptr, format, args);
+	}
+
+	inline COMPILER_PRINTF_ARGS_CHECK(3,4) bool WriteFileFormat(Handle file, size_t *pWritten, const char *format, ...)
+	{
+		va_list args;
+		va_start(args, format);
+		bool status = WriteFileFormatV(file, pWritten, format, args);
+		va_end(args);
+
+		return status;
+	}
+
+	inline COMPILER_PRINTF_ARGS_CHECK(2,3) bool WriteFileFormat(Handle file, const char *format, ...)
+	{
+		va_list args;
+		va_start(args, format);
+		bool status = WriteFileFormatV(file, format, args);
+		va_end(args);
+
+		return status;
 	}
 
 	/**
@@ -482,21 +640,49 @@ namespace RTL
 	/**
 	 * @brief Zapíše řetězec ukončený nulou na standardní výstup procesu.
 	 * @param string Řetězec k zapsání.
+	 * @param pWritten Volitelný ukazatel na proměnnou, kam se uloží počet zapsaných bajtů. Může být null.
 	 * @return Pokud vše proběhlo v pořádku, tak true, jinak false. Chybový kód je možné získat pomocí RTL::GetLastError.
 	 */
-	inline bool WriteStdOut(const char *string)
+	inline bool WriteStdOut(const char *string, size_t *pWritten = nullptr)
 	{
-		return WriteFile(GetStdOutHandle(), string);
+		return WriteFile(GetStdOutHandle(), string, pWritten);
 	}
 
 	/**
 	 * @brief Zapíše řetězec na standardní výstup procesu.
 	 * @param string Řetězec k zapsání.
+	 * @param pWritten Volitelný ukazatel na proměnnou, kam se uloží počet zapsaných bajtů. Může být null.
 	 * @return Pokud vše proběhlo v pořádku, tak true, jinak false. Chybový kód je možné získat pomocí RTL::GetLastError.
 	 */
-	inline bool WriteStdOut(const std::string & string)
+	inline bool WriteStdOut(const std::string & string, size_t *pWritten = nullptr)
 	{
-		return WriteFile(GetStdOutHandle(), string);
+		return WriteFile(GetStdOutHandle(), string, pWritten);
+	}
+
+	template<size_t Size>
+	inline bool WriteStdOut(const StringBuffer<Size> & buffer, size_t *pWritten = nullptr)
+	{
+		return WriteFile(GetStdOutHandle(), buffer, pWritten);
+	}
+
+	inline COMPILER_PRINTF_ARGS_CHECK(2,3) bool WriteStdOutFormat(size_t *pWritten, const char *format, ...)
+	{
+		va_list args;
+		va_start(args, format);
+		bool status = WriteFileFormatV(GetStdOutHandle(), pWritten, format, args);
+		va_end(args);
+
+		return status;
+	}
+
+	inline COMPILER_PRINTF_ARGS_CHECK(1,2) bool WriteStdOutFormat(const char *format, ...)
+	{
+		va_list args;
+		va_start(args, format);
+		bool status = WriteFileFormatV(GetStdOutHandle(), format, args);
+		va_end(args);
+
+		return status;
 	}
 
 	enum struct Position
@@ -562,9 +748,44 @@ namespace RTL
 	{
 		Handle handle = 0;
 
+		File() = default;
+
+		File(const File &) = delete;
+
+		File(File && other)
+		: handle(other.handle)
+		{
+			other.handle = 0;
+		}
+
+		File & operator=(const File &) = delete;
+
+		File & operator=(File && other)
+		{
+			if (this != &other)
+			{
+				close();
+
+				handle = other.handle;
+
+				other.handle = 0;
+			}
+
+			return *this;
+		}
+
 		~File()
 		{
 			close();
+		}
+
+		void close()
+		{
+			if (handle)
+			{
+				CloseHandle(handle);
+				handle = 0;
+			}
 		}
 
 		bool open(const char *path, bool readOnly = false)
@@ -633,6 +854,27 @@ namespace RTL
 			return WriteFile(handle, string);
 		}
 
+		template<size_t Size>
+		bool write(const StringBuffer<Size> & buffer)
+		{
+			return WriteFile(handle, buffer);
+		}
+
+		bool writeFormat(const char *format, ...) COMPILER_PRINTF_ARGS_CHECK(2,3)
+		{
+			va_list args;
+			va_start(args, format);
+			bool status = WriteFileFormatV(handle, format, args);
+			va_end(args);
+
+			return status;
+		}
+
+		bool writeFormatV(const char *format, va_list args)
+		{
+			return WriteFileFormatV(handle, format, args);
+		}
+
 		int64_t getPos()
 		{
 			int64_t result = 0;
@@ -650,6 +892,42 @@ namespace RTL
 		{
 			return SetFileSize(handle, pos, base);
 		}
+	};
+
+	struct Directory
+	{
+		Handle handle = 0;
+
+		Directory() = default;
+
+		Directory(const Directory &) = delete;
+
+		Directory(Directory && other)
+		: handle(other.handle)
+		{
+			other.handle = 0;
+		}
+
+		Directory & operator=(const Directory &) = delete;
+
+		Directory & operator=(Directory && other)
+		{
+			if (this != &other)
+			{
+				close();
+
+				handle = other.handle;
+
+				other.handle = 0;
+			}
+
+			return *this;
+		}
+
+		~Directory()
+		{
+			close();
+		}
 
 		void close()
 		{
@@ -658,16 +936,6 @@ namespace RTL
 				CloseHandle(handle);
 				handle = 0;
 			}
-		}
-	};
-
-	struct Directory
-	{
-		Handle handle = 0;
-
-		~Directory()
-		{
-			close();
 		}
 
 		bool open(const char *path)
@@ -716,15 +984,6 @@ namespace RTL
 			return isOpen();
 		}
 
-		void close()
-		{
-			if (handle)
-			{
-				CloseHandle(handle);
-				handle = 0;
-			}
-		}
-
 		std::vector<DirectoryEntry> getContent()
 		{
 			std::vector<DirectoryEntry> result;
@@ -743,10 +1002,63 @@ namespace RTL
 		Handle readEnd = 0;
 		Handle writeEnd = 0;
 
+		Pipe() = default;
+
+		Pipe(const Pipe &) = delete;
+
+		Pipe(Pipe && other)
+		: readEnd(other.readEnd),
+		  writeEnd(other.writeEnd)
+		{
+			other.readEnd = 0;
+			other.writeEnd = 0;
+		}
+
+		Pipe & operator=(const Pipe &) = delete;
+
+		Pipe & operator=(Pipe && other)
+		{
+			if (this != &other)
+			{
+				close();
+
+				readEnd = other.readEnd;
+				writeEnd = other.writeEnd;
+
+				other.readEnd = 0;
+				other.writeEnd = 0;
+			}
+
+			return *this;
+		}
+
 		~Pipe()
+		{
+			close();
+		}
+
+		void close()
 		{
 			closeWriteEnd();
 			closeReadEnd();
+		}
+
+		void closeReadEnd()
+		{
+			if (readEnd)
+			{
+				CloseHandle(readEnd);
+				readEnd = 0;
+			}
+		}
+
+		void closeWriteEnd()
+		{
+			if (writeEnd)
+			{
+				CloseHandle(writeEnd);
+				writeEnd = 0;
+			}
 		}
 
 		bool isReadEndOpen() const
@@ -767,24 +1079,6 @@ namespace RTL
 		explicit operator bool() const
 		{
 			return isOpen();
-		}
-
-		void closeReadEnd()
-		{
-			if (readEnd)
-			{
-				CloseHandle(readEnd);
-				readEnd = 0;
-			}
-		}
-
-		void closeWriteEnd()
-		{
-			if (writeEnd)
-			{
-				CloseHandle(writeEnd);
-				writeEnd = 0;
-			}
 		}
 	};
 

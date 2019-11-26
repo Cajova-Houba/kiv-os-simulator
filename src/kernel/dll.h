@@ -26,6 +26,8 @@ public:
 	{
 		if (this != &other)
 		{
+			release();
+
 			m_handle = other.m_handle;
 
 			other.m_handle = nullptr;

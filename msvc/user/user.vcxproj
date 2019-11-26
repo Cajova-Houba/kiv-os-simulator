@@ -22,6 +22,8 @@
     <ClInclude Include="..\..\src\api\api.h" />
     <ClInclude Include="..\..\src\api\hal.h" />
     <ClInclude Include="..\..\src\user\rtl.h" />
+	<ClInclude Include="..\..\src\user\string_buffer.h" />
+	<ClInclude Include="..\..\src\user\util.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\api\api.cpp" />

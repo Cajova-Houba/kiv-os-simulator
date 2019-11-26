@@ -2,37 +2,15 @@
 
 #include "rtl.h"
 
-// data předaná nově vytvořenému vláknu
-struct ThreadEntryData
-{
-	RTL::ThreadMain mainFunc = nullptr;
-	void *param = nullptr;
-
-	// informace o procesu ve kterém je nově vytvořené vlákno spuštěno
-	RTL::ProcessEnvironment process;
-};
-
-
-static thread_local RTL::ThreadEnvironment g_threadEnv;
-
+static thread_local RTL::ThreadEnvironment *g_pThreadEnv;
 
 // vstupní bod pro všechna nově vytvořená vlákna kromě hlavního vlákna každého procesu
 static size_t __stdcall ThreadEntry(const kiv_hal::TRegisters & context)
 {
-	RTL::ThreadMain threadMain;
-	void *param;
+	RTL::ThreadEnvironmentGuard environment(reinterpret_cast<RTL::ThreadEnvironment*>(context.rdi.r));
 
-	{
-		ThreadEntryData *pData = reinterpret_cast<ThreadEntryData*>(context.rdi.r);
-
-		threadMain = pData->mainFunc;
-		param = pData->param;
-
-		// nastavení informací o procesu
-		g_threadEnv.process = pData->process;
-
-		delete pData;
-	}
+	RTL::ThreadMain threadMain = g_pThreadEnv->mainFunc;
+	void *param = g_pThreadEnv->param;
 
 	// spuštění main funkce nového vlákna
 	int exitCode = threadMain(param);
@@ -47,10 +25,11 @@ static size_t __stdcall SignalEntry(const kiv_hal::TRegisters & context)
 {
 	RTL::Signal signal = static_cast<RTL::Signal>(context.rcx.l);
 
-	if (g_threadEnv.signalHandler)
+	RTL::SignalHandler handler = g_pThreadEnv->signalHandler;
+	if (handler)
 	{
 		// spuštění handleru nastaveného pomocí RTL::SetupSignals
-		g_threadEnv.signalHandler(signal);
+		handler(signal);
 	}
 
 	return 0;
@@ -74,7 +53,7 @@ static bool SysCall(kiv_hal::TRegisters & context)
 static void ConfigureSignal(RTL::Signal signal, uint32_t signalMask)
 {
 	const uint8_t signalNumber = static_cast<uint8_t>(signal);
-	const bool isActive = (0x1 << signalNumber) & signalMask;
+	const bool isActive = (0x1 << (signalNumber - 1)) & signalMask;
 
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::Process);
@@ -161,6 +140,27 @@ bool RTL::CloseHandle(RTL::Handle handle)
 	return true;
 }
 
+RTL::ThreadEnvironmentGuard::ThreadEnvironmentGuard(Handle stdIn, Handle stdOut, const char *cmdLine)
+{
+	g_pThreadEnv = new ThreadEnvironment;
+
+	ProcessEnvironment & env = g_pThreadEnv->process;
+	env.stdIn = stdIn;
+	env.stdOut = stdOut;
+	env.cmdLine = cmdLine;
+}
+
+RTL::ThreadEnvironmentGuard::ThreadEnvironmentGuard(ThreadEnvironment *pThreadEnv)
+{
+	g_pThreadEnv = pThreadEnv;
+}
+
+RTL::ThreadEnvironmentGuard::~ThreadEnvironmentGuard()
+{
+	delete g_pThreadEnv;
+	g_pThreadEnv = nullptr;
+}
+
 
 // ========================
 // ==  Procesy a vlákna  ==
@@ -186,24 +186,24 @@ RTL::Handle RTL::CreateProcess(const char *program, const RTL::ProcessEnvironmen
 
 RTL::Handle RTL::CreateThread(RTL::ThreadMain mainFunc, void *param)
 {
-	ThreadEntryData *pData = new (std::nothrow) ThreadEntryData;
-	if (!pData)
+	ThreadEnvironment *pEnv = new (std::nothrow) ThreadEnvironment;
+	if (!pEnv)
 	{
 		SetLastError(RTL::Error::OUT_OF_MEMORY);
 		return 0;
 	}
 
-	pData->mainFunc = mainFunc;
-	pData->param = param;
+	pEnv->mainFunc = mainFunc;
+	pEnv->param = param;
 
-	pData->process = g_threadEnv.process;
+	pEnv->process = g_pThreadEnv->process;
 
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::Process);
 	registers.rax.l = static_cast<uint8_t>(kiv_os::NOS_Process::Clone);
 	registers.rcx.l = static_cast<uint8_t>(kiv_os::NClone::Create_Thread);
 	registers.rdx.r = reinterpret_cast<uint64_t>(ThreadEntry);
-	registers.rdi.r = reinterpret_cast<uint64_t>(pData);
+	registers.rdi.r = reinterpret_cast<uint64_t>(pEnv);
 
 	if (!SysCall(registers))
 	{
@@ -252,8 +252,8 @@ void RTL::SetupSignals(RTL::SignalHandler handler, uint32_t signalMask)
 		signalMask = 0;
 	}
 
-	g_threadEnv.signalHandler = handler;
-	g_threadEnv.signalMask = signalMask;
+	g_pThreadEnv->signalHandler = handler;
+	g_pThreadEnv->signalMask = signalMask;
 
 	// aktualizace nastavení všech signálů
 	ConfigureSignal(RTL::Signal::TERMINATE, signalMask);  // API definuje pouze jeden signál
@@ -261,27 +261,27 @@ void RTL::SetupSignals(RTL::SignalHandler handler, uint32_t signalMask)
 
 RTL::SignalHandler RTL::GetSignalHandler()
 {
-	return g_threadEnv.signalHandler;
+	return g_pThreadEnv->signalHandler;
 }
 
 uint32_t RTL::GetSignalMask()
 {
-	return g_threadEnv.signalMask;
+	return g_pThreadEnv->signalMask;
 }
 
 const char *RTL::GetProcessCmdLine()
 {
-	return g_threadEnv.process.cmdLine;
+	return g_pThreadEnv->process.cmdLine;
 }
 
 RTL::Handle RTL::GetStdInHandle()
 {
-	return g_threadEnv.process.stdIn;
+	return g_pThreadEnv->process.stdIn;
 }
 
 RTL::Handle RTL::GetStdOutHandle()
 {
-	return g_threadEnv.process.stdOut;
+	return g_pThreadEnv->process.stdOut;
 }
 
 std::string RTL::GetWorkingDirectory()
@@ -321,7 +321,7 @@ bool RTL::SetWorkingDirectory(const char *path)
 
 RTL::ThreadEnvironment *RTL::GetCurrentThreadEnv()
 {
-	return &g_threadEnv;
+	return g_pThreadEnv;
 }
 
 void RTL::SetCurrentThreadExitCode(int exitCode)
@@ -341,12 +341,12 @@ void RTL::SetCurrentThreadExitCode(int exitCode)
 
 RTL::Error RTL::GetLastError()
 {
-	return g_threadEnv.lastError;
+	return g_pThreadEnv->lastError;
 }
 
 void RTL::SetLastError(RTL::Error error)
 {
-	g_threadEnv.lastError = error;
+	g_pThreadEnv->lastError = error;
 }
 
 std::string RTL::ErrorToString(RTL::Error error)
@@ -355,7 +355,7 @@ std::string RTL::ErrorToString(RTL::Error error)
 	{
 		case RTL::Error::SUCCESS:               return "Vse v poradku";
 		case RTL::Error::INVALID_ARGUMENT:      return "Neplatny parametr";
-		case RTL::Error::FILE_NOT_FOUND:        return "Soubor nenalezen";
+		case RTL::Error::FILE_NOT_FOUND:        return "Soubor nebo adresar nenalezen";
 		case RTL::Error::DIRECTORY_NOT_EMPTY:   return "Adresar neni prazdny";
 		case RTL::Error::NOT_ENOUGH_DISK_SPACE: return "Nedostatek mista na disku";
 		case RTL::Error::OUT_OF_MEMORY:         return "Nedostatek pameti";
@@ -489,6 +489,14 @@ bool RTL::WriteFile(kiv_os::THandle file, const void *buffer, size_t size, size_
 	}
 
 	return true;
+}
+
+bool RTL::WriteFileFormatV(RTL::Handle file, size_t *pWritten, const char *format, va_list args)
+{
+	StringBuffer<4096> buffer;
+	buffer.append_vf(format, args);
+
+	return WriteFile(file, buffer.get(), buffer.getLength(), pWritten);
 }
 
 bool RTL::GetFilePos(RTL::Handle file, int64_t & result)

@@ -30,30 +30,32 @@ size_t PipeReadEnd::push(const char *data, size_t dataLength)
 {
 	std::unique_lock<std::mutex> lock(m_mutex);
 
-	if (!m_pWriteEnd)
-	{
-		return 0;
-	}
+	size_t writtenLength = 0;
 
-	size_t totalLength = 0;
-
-	while (totalLength < dataLength)
+	while (writtenLength < dataLength)
 	{
 		while (m_isFull)
 		{
-			m_cv.wait(lock);
+			if (m_pWriteEnd)
+			{
+				m_cv.wait(lock);
+			}
+			else
+			{
+				return 0;
+			}
 		}
 
 		size_t length = (m_writerPos >= m_readerPos) ? m_buffer.size() - m_writerPos : m_readerPos - m_writerPos;
 
-		if (length + totalLength > dataLength)
+		if ((length + writtenLength) > dataLength)
 		{
-			length = dataLength - totalLength;
+			length = dataLength - writtenLength;
 		}
 
-		std::memcpy(m_buffer.data() + m_writerPos, data + totalLength, length);
+		std::memcpy(m_buffer.data() + m_writerPos, data + writtenLength, length);
 
-		totalLength += length;
+		writtenLength += length;
 
 		m_writerPos += length;
 		if (m_writerPos >= m_buffer.size())
@@ -70,7 +72,7 @@ size_t PipeReadEnd::push(const char *data, size_t dataLength)
 	lock.unlock();
 	m_cv.notify_one();
 
-	return totalLength;
+	return writtenLength;
 }
 
 void PipeReadEnd::onWriteEndClosed()
@@ -130,20 +132,20 @@ EStatus PipeReadEnd::read(char *buffer, size_t bufferSize, size_t *pRead)
 		}
 	}
 
-	size_t totalLength = 0;
+	size_t readLength = 0;
 
-	while (m_readerPos != m_writerPos && totalLength < bufferSize)
+	while (m_readerPos != m_writerPos && readLength < bufferSize)
 	{
 		size_t length = (m_readerPos < m_writerPos) ? m_writerPos - m_readerPos : m_buffer.size() - m_readerPos;
 
-		if (length + totalLength > bufferSize)
+		if ((length + readLength) > bufferSize)
 		{
-			length = bufferSize - totalLength;
+			length = bufferSize - readLength;
 		}
 
-		std::memcpy(buffer + totalLength, m_buffer.data() + m_readerPos, length);
+		std::memcpy(buffer + readLength, m_buffer.data() + m_readerPos, length);
 
-		totalLength += length;
+		readLength += length;
 
 		m_readerPos += length;
 		if (m_readerPos >= m_buffer.size())
@@ -152,7 +154,7 @@ EStatus PipeReadEnd::read(char *buffer, size_t bufferSize, size_t *pRead)
 		}
 	}
 
-	if (totalLength > 0)
+	if (readLength > 0)
 	{
 		m_isFull = false;
 	}
@@ -162,7 +164,7 @@ EStatus PipeReadEnd::read(char *buffer, size_t bufferSize, size_t *pRead)
 
 	if (pRead)
 	{
-		(*pRead) = totalLength;
+		(*pRead) = readLength;
 	}
 
 	return EStatus::SUCCESS;
@@ -200,11 +202,11 @@ EStatus PipeWriteEnd::write(const char *buffer, size_t bufferSize, size_t *pWrit
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	size_t length = m_pReadEnd->push(buffer, bufferSize);
+	size_t writtenLength = m_pReadEnd->push(buffer, bufferSize);
 
 	if (pWritten)
 	{
-		(*pWritten) = length;
+		(*pWritten) = writtenLength;
 	}
 
 	return EStatus::SUCCESS;

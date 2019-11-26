@@ -158,7 +158,7 @@ static EStatus SystemShutdown()
 {
 	// získáme handle na všechna uživatelská vlákna v systému
 	std::vector<HandleReference> threads = Kernel::GetHandleStorage().getHandles(
-		[](HandleID, const IHandle *pHandle) -> bool
+		[](HandleID id, const IHandle *pHandle) -> bool
 		{
 			return pHandle->getHandleType() == EHandle::THREAD;
 		}

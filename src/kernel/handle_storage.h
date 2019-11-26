@@ -17,7 +17,7 @@ class HandleStorage
 
 	std::map<HandleID, HandleData> m_handles;
 	std::mutex m_mutex;
-	HandleID m_lastID;
+	HandleID m_lastID = 0;
 
 	void removeRef(HandleID id);
 

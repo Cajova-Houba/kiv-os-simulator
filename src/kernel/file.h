@@ -23,8 +23,8 @@ namespace FileAttributes  // kiv_os::NFile_Attributes
 
 struct FileInfo
 {
-	uint16_t attributes;  // FileAttributes
-	uint64_t size;
+	uint16_t attributes = 0;  // FileAttributes
+	uint64_t size = 0;
 
 	bool isReadOnly() const
 	{
@@ -41,6 +41,12 @@ struct DirectoryEntry  // rtl.h
 {
 	uint16_t attributes;  // FileAttributes
 	char name[62];        // řetězec ukončený nulou
+
+	DirectoryEntry()
+	{
+		attributes = 0;
+		name[0] = '\0';
+	}
 
 	bool isReadOnly() const
 	{

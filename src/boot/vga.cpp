@@ -1,18 +1,19 @@
-#include <string>
 #include <windows.h>
 
 #include "vga.h"
+#include "string_buffer.h"
 
 static bool g_isStdOutConsole = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_CHAR;
 
 static void WriteString(const char *string, size_t length)
 {
-	std::string buffer;
-	buffer.reserve(length);
+	StringBuffer<4096> buffer;
+	buffer.makeSpaceFor(length);
 
 	for (size_t i = 0; i < length; i++)
 	{
-		const char ch = string[i];
+		char ch = string[i];
+
 		switch (ch)
 		{
 			case '\b':  // backspace
@@ -44,10 +45,10 @@ static void WriteString(const char *string, size_t length)
 		}
 	}
 
-	HANDLE file = GetStdHandle(STD_OUTPUT_HANDLE);
+	HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
 
 	DWORD written;
-	WriteFile(file, buffer.c_str(), static_cast<DWORD>(buffer.length()), &written, NULL);
+	WriteFile(output, buffer.get(), static_cast<DWORD>(buffer.getLength()), &written, NULL);
 }
 
 void __stdcall VGA::InterruptHandler(kiv_hal::TRegisters & context)
@@ -56,15 +57,13 @@ void __stdcall VGA::InterruptHandler(kiv_hal::TRegisters & context)
 	{
 		case kiv_hal::NVGA_BIOS::Write_Control_Char:
 		{
-			const char ch = context.rdx.l;
+			char ch = context.rdx.l;
 			WriteString(&ch, 1);
 			break;
 		}
 		case kiv_hal::NVGA_BIOS::Write_String:
 		{
-			const char *string = reinterpret_cast<const char*>(context.rdx.r);
-			const size_t length = context.rcx.r;
-			WriteString(string, length);
+			WriteString(reinterpret_cast<const char*>(context.rdx.r), context.rcx.r);
 			break;
 		}
 		default:

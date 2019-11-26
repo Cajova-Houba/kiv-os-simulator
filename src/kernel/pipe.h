@@ -16,13 +16,13 @@ class PipeWriteEnd;
 class PipeReadEnd : public IFileHandle
 {
 	std::array<char, 1024> m_buffer;
-	size_t m_readerPos;
-	size_t m_writerPos;
-	bool m_isFull;
-	bool m_isClosed;
+	size_t m_readerPos = 0;
+	size_t m_writerPos = 0;
+	bool m_isFull = false;
+	bool m_isClosed = false;
 	std::mutex m_mutex;
 	std::condition_variable m_cv;
-	PipeWriteEnd *m_pWriteEnd;
+	PipeWriteEnd *m_pWriteEnd = nullptr;
 
 	size_t push(const char *data, size_t dataLength);
 	void onWriteEndClosed();
@@ -32,6 +32,12 @@ class PipeReadEnd : public IFileHandle
 
 public:
 	PipeReadEnd() = default;
+
+	PipeReadEnd(const PipeReadEnd &) = delete;
+	PipeReadEnd(PipeReadEnd &&) = delete;
+
+	PipeReadEnd & operator=(const PipeReadEnd &) = delete;
+	PipeReadEnd & operator=(PipeReadEnd &&) = delete;
 
 	~PipeReadEnd()
 	{
@@ -47,7 +53,7 @@ public:
 
 	EStatus read(char *buffer, size_t bufferSize, size_t *pRead) override;
 
-	EStatus write(const char*, size_t, size_t*) override
+	EStatus write(const char *buffer, size_t bufferSize, size_t *pWritten) override
 	{
 		return EStatus::INVALID_ARGUMENT;
 	}
@@ -56,7 +62,7 @@ public:
 class PipeWriteEnd : public IFileHandle
 {
 	std::mutex m_mutex;
-	PipeReadEnd *m_pReadEnd;
+	PipeReadEnd *m_pReadEnd = nullptr;
 
 	void onReadEndClosed();
 
@@ -65,6 +71,12 @@ class PipeWriteEnd : public IFileHandle
 
 public:
 	PipeWriteEnd() = default;
+
+	PipeWriteEnd(const PipeWriteEnd &) = delete;
+	PipeWriteEnd(PipeWriteEnd &&) = delete;
+
+	PipeWriteEnd & operator=(const PipeWriteEnd &) = delete;
+	PipeWriteEnd & operator=(PipeWriteEnd &&) = delete;
 
 	~PipeWriteEnd()
 	{
@@ -78,7 +90,7 @@ public:
 
 	void close() override;
 
-	EStatus read(char*, size_t, size_t*) override
+	EStatus read(char *buffer, size_t bufferSize, size_t *pRead) override
 	{
 		return EStatus::INVALID_ARGUMENT;
 	}

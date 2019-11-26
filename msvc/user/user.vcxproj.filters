@@ -24,6 +24,12 @@
     <ClInclude Include="..\..\src\user\rtl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+	<ClInclude Include="..\..\src\user\string_buffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+	<ClInclude Include="..\..\src\user\util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\user\rtl.cpp">

@@ -56,22 +56,22 @@ static EStatus QueryProcessFile(const std::string & fileName, Process & process,
 			{
 				case EProcessFile::COMMAND_LINE:
 				{
-					size = process.getCmdLine().length() + 1;
+					size = process.getCmdLine().length();
 					break;
 				}
 				case EProcessFile::WORKING_DIRECTORY:
 				{
-					size = process.getWorkingDirectoryString().length() + 1;
+					size = process.getWorkingDirectoryString().length();
 					break;
 				}
 				case EProcessFile::PROCESS_NAME:
 				{
-					size = process.getName().length() + 1;
+					size = process.getName().length();
 					break;
 				}
 				case EProcessFile::THREAD_COUNT:
 				{
-					size = std::to_string(process.getThreadCount()).length() + 1;
+					size = std::to_string(process.getThreadCount()).length();
 					break;
 				}
 			}
@@ -238,7 +238,7 @@ EStatus ProcFS::readDir(const Path & path, DirectoryEntry *entries, size_t entry
 		case 0:
 		{
 			std::vector<HandleReference> processes = Kernel::GetHandleStorage().getHandles(
-				[](HandleID, const IHandle *pHandle) -> bool
+				[](HandleID id, const IHandle *pHandle) -> bool
 				{
 					return pHandle->getHandleType() == EHandle::PROCESS;
 				}

@@ -1,37 +1,45 @@
 #include <cctype>
 #include <cstring>
+#include <algorithm>
 
 #include "path.h"
 
 int Path::compare(const Path & other) const
 {
-	if (isRelative() && other.isAbsolute())
+	if (isRelative() != other.isRelative())
 	{
-		return -1;
-	}
-	else if (isAbsolute() && other.isRelative())
-	{
-		return 1;
+		return (isRelative()) ? -1 : 1;
 	}
 
-	if (m_parentCount < other.m_parentCount)
+	if (isAbsolute())
 	{
-		return -1;
+		if (m_diskLetter != other.m_diskLetter)
+		{
+			return (m_diskLetter < other.m_diskLetter) ? -1 : 1;
+		}
 	}
-	else if (m_parentCount > other.m_parentCount)
+	else
 	{
-		return 1;
+		if (m_parentCount != other.m_parentCount)
+		{
+			return (m_parentCount < other.m_parentCount) ? -1 : 1;
+		}
 	}
 
-	const size_t size = (m_path.size() <= other.m_path.size()) ? m_path.size() : other.m_path.size();
+	const size_t componentCount = std::min(m_path.size(), other.m_path.size());
 
-	for (size_t i = 0; i < size; i++)
+	for (size_t i = 0; i < componentCount; i++)
 	{
 		int result = m_path[i].compare(other.m_path[i]);
 		if (result != 0)
 		{
 			return result;
 		}
+	}
+
+	if (m_path.size() != other.m_path.size())
+	{
+		return (m_path.size() < other.m_path.size()) ? -1 : 1;
 	}
 
 	return 0;
@@ -116,19 +124,23 @@ bool Path::makeAbsolute(const Path & base)
 		return false;
 	}
 
+	const size_t baseComponentCount = (m_parentCount < base.m_path.size()) ? base.m_path.size() - m_parentCount : 0;
+
 	std::vector<std::string> newPath;
-	newPath.reserve(base.m_path.size() + m_path.size());
+	newPath.reserve(baseComponentCount + m_path.size());
 
-	for (const std::string & component : base.m_path)
+	for (size_t i = 0; i < baseComponentCount; i++)
 	{
-		newPath.emplace_back(component);
+		newPath.emplace_back(base.m_path[i]);
 	}
 
-	for (const std::string & component : m_path)
+	for (size_t i = 0; i < m_path.size(); i++)
 	{
-		newPath.emplace_back(component);
+		newPath.emplace_back(std::move(m_path[i]));
 	}
 
+	m_diskLetter = base.m_diskLetter;
+	m_parentCount = 0;
 	m_path = std::move(newPath);
 
 	return true;
@@ -167,6 +179,7 @@ Path Path::Parse(const char *path)
 				{
 					component += '_';  // nepodporovaný znak
 				}
+
 				break;
 			}
 			case '/':
@@ -177,37 +190,40 @@ Path Path::Parse(const char *path)
 					result.m_path.emplace_back(std::move(component));
 					component.clear();
 				}
+
+				break;
+			}
+			case '\'':
+			case '\"':
+			{
 				break;
 			}
 			case '.':
 			{
 				auto IsSeparator = [](char ch) -> bool { return ch == '/' || ch == '\\' || ch == '\0'; };
 
-				if (i > 0 && IsSeparator(path[i-1]))
+				if (i == 0 || IsSeparator(path[i-1]))
 				{
 					char next = path[i+1];
 
-					if (IsSeparator(next))  // cesta obsahuje "/./"
+					if (!IsSeparator(next))  // "."
 					{
-						i++;
-					}
-					else if (next == '.' && IsSeparator(path[i+2]))  // cesta obsahuje "/../"
-					{
-						if (!result.m_path.empty())
+						if (next == '.' && IsSeparator(path[i+2]))  // ".."
 						{
-							result.m_path.pop_back();
+							if (!result.m_path.empty())
+							{
+								result.m_path.pop_back();
+							}
+							else if (result.isRelative())
+							{
+								result.m_parentCount++;
+							}
 						}
-						else if (result.isRelative())
+						else
 						{
-							result.m_parentCount++;
+							component += '.';
+							component += next;
 						}
-
-						i += 2;
-					}
-					else
-					{
-						component += '.';
-						component += next;
 
 						i++;
 					}
@@ -216,6 +232,7 @@ Path Path::Parse(const char *path)
 				{
 					component += '.';
 				}
+
 				break;
 			}
 			case ' ':
@@ -231,11 +248,13 @@ Path Path::Parse(const char *path)
 			case '~':
 			{
 				component += ch;
+
 				break;
 			}
 			default:
 			{
 				component += std::isalnum(ch) ? ch : '_';  // nepodporovaný znak
+
 				break;
 			}
 		}

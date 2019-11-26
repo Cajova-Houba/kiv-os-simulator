@@ -82,7 +82,7 @@ EStatus File::write(const char *buffer, size_t bufferSize, size_t *pWritten)
 
 EStatus File::seek(kiv_os::NFile_Seek command, kiv_os::NFile_Seek base, int64_t offset, uint64_t & result)
 {
-	if (m_info.isReadOnly() || m_info.isDirectory())
+	if (m_info.isDirectory())
 	{
 		return EStatus::INVALID_ARGUMENT;
 	}
@@ -120,6 +120,7 @@ EStatus File::seek(kiv_os::NFile_Seek command, kiv_os::NFile_Seek base, int64_t 
 		case kiv_os::NFile_Seek::Set_Position:
 		case kiv_os::NFile_Seek::Set_Size:
 		{
+			uint64_t endPos = m_info.size;
 			uint64_t newPos = 0;
 
 			switch (base)
@@ -136,7 +137,6 @@ EStatus File::seek(kiv_os::NFile_Seek command, kiv_os::NFile_Seek base, int64_t 
 				}
 				case kiv_os::NFile_Seek::End:
 				{
-					uint64_t endPos = m_info.size;
 					newPos = (offset < 0 && static_cast<uint64_t>(-offset) > endPos) ? 0 : endPos + offset;
 					break;
 				}
@@ -148,6 +148,11 @@ EStatus File::seek(kiv_os::NFile_Seek command, kiv_os::NFile_Seek base, int64_t 
 
 			if (command == kiv_os::NFile_Seek::Set_Size)
 			{
+				if (m_info.isReadOnly())
+				{
+					return EStatus::PERMISSION_DENIED;
+				}
+
 				EStatus resizeStatus = Kernel::GetFileSystem().resize(m_path, newPos);
 				if (resizeStatus != EStatus::SUCCESS)
 				{
@@ -156,9 +161,9 @@ EStatus File::seek(kiv_os::NFile_Seek command, kiv_os::NFile_Seek base, int64_t 
 			}
 			else
 			{
-				if (newPos > m_pos)
+				if (newPos > endPos)
 				{
-					newPos = m_pos;
+					newPos = endPos;
 				}
 			}
 

@@ -43,26 +43,33 @@ static bool PeekChar()
 
 		INPUT_RECORD record;
 		DWORD read;
-		if (PeekConsoleInputA(console, &record, 1, &read) && read > 0 && record.EventType == KEY_EVENT)
+		if (!PeekConsoleInputA(console, &record, 1, &read) || read == 0 || record.EventType != KEY_EVENT)
 		{
-			return true;
+			return false;
 		}
 	}
-	else
-	{
-		return true;
-	}
 
-	return false;
+	return true;
 }
 
 static char ReadChar()
 {
-	HANDLE console = GetStdHandle(STD_INPUT_HANDLE);
+	HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
 
 	char ch;
 	DWORD read;
-	if (!ReadFile(console, &ch, 1, &read, NULL))
+	BOOL status;
+
+	if (g_isStdInConsole)
+	{
+		status = ReadConsoleA(input, &ch, 1, &read, NULL);
+	}
+	else
+	{
+		status = ReadFile(input, &ch, 1, &read, NULL);
+	}
+
+	if (!status)
 	{
 		return kiv_hal::NControl_Codes::EOT;
 	}

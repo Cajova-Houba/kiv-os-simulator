@@ -18,10 +18,10 @@ namespace Event
 
 class EventSystem
 {
-	struct WaitInfo;
+	class WaitDescriptor;
 
 	std::mutex m_mutex;
-	std::vector<WaitInfo*> m_waiting;
+	std::vector<WaitDescriptor*> m_waiting;
 
 public:
 	EventSystem() = default;

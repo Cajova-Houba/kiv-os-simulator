@@ -7,7 +7,8 @@
 
 class Console : public IFileHandle
 {
-	std::mutex m_mutex;
+	std::mutex m_readerMutex;
+	std::mutex m_writerMutex;
 
 public:
 	Console() = default;

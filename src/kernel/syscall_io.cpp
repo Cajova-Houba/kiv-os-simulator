@@ -67,10 +67,6 @@ static EStatus Open(const char *pathString, uint8_t flags, uint16_t attributes, 
 	Process & currentProcess = Thread::GetProcess();
 
 	Path path = Path::Parse(pathString);
-	if (!path)
-	{
-		return EStatus::INVALID_ARGUMENT;
-	}
 
 	if (!path.isAbsolute())
 	{
@@ -183,10 +179,6 @@ static EStatus Close(HandleID id)
 static EStatus Delete(const char *pathString)
 {
 	Path path = Path::Parse(pathString);
-	if (!path)
-	{
-		return EStatus::INVALID_ARGUMENT;
-	}
 
 	if (!path.isAbsolute())
 	{
@@ -201,10 +193,6 @@ static EStatus SetWorkingDirectory(const char *pathString)
 	Process & currentProcess = Thread::GetProcess();
 
 	Path path = Path::Parse(pathString);
-	if (!path)
-	{
-		return EStatus::INVALID_ARGUMENT;
-	}
 
 	if (!path.isAbsolute())
 	{

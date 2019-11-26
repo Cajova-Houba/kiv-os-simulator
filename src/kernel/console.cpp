@@ -45,7 +45,7 @@ static int HALReadLine(char *buffer, size_t bufferSize)
 {
 	size_t length = 0;
 
-	while (length <= bufferSize)
+	while (length < bufferSize)
 	{
 		char ch;
 		if (!HALReadChar(ch))
@@ -66,6 +66,7 @@ static int HALReadLine(char *buffer, size_t bufferSize)
 					length--;
 					HALWriteChar('\b');
 				}
+
 				break;
 			}
 			case '\n':
@@ -79,10 +80,20 @@ static int HALReadLine(char *buffer, size_t bufferSize)
 
 				return static_cast<int>(length);
 			}
+			case 3:     // Ctrl + C
+			case 4:     // Ctrl + D
+			case 26:    // Ctrl + Z
+			case '\t':  // Tabulátor
+			{
+				buffer[length++] = ch;
+
+				return static_cast<int>(length);
+			}
 			default:
 			{
 				buffer[length++] = ch;
 				HALWriteChar(ch);
+
 				break;
 			}
 		}
@@ -98,7 +109,7 @@ EStatus Console::read(char *buffer, size_t bufferSize, size_t *pRead)
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	std::lock_guard<std::mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_readerMutex);
 
 	EStatus status = EStatus::SUCCESS;
 
@@ -124,7 +135,7 @@ EStatus Console::write(const char *buffer, size_t bufferSize, size_t *pWritten)
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	std::lock_guard<std::mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_writerMutex);
 
 	HALWriteString(buffer, bufferSize);
 
@@ -164,7 +175,7 @@ void Console::logV(const char *format, va_list args)
 	buffer[length++] = '\n';
 	// výsledný řetězec už není ukončený nulou!
 
-	std::lock_guard<std::mutex> lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_writerMutex);
 
 	HALWriteString(buffer, length);
 }

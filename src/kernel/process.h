@@ -13,7 +13,8 @@ class Process : public IHandle
 {
 	std::set<HandleReference> m_handles;
 	std::atomic<uint16_t> m_threadCount;
-	HandleID m_mainThreadID;
+	std::atomic<bool> m_wasStarted;
+	HandleID m_mainThreadID = 0;
 	Path m_currentDirectory;
 	std::string m_name;
 	std::string m_cmdLine;
@@ -27,6 +28,11 @@ class Process : public IHandle
 	uint16_t decrementThreadCount()
 	{
 		return --m_threadCount;
+	}
+
+	void setStarted(bool wasStarted)
+	{
+		m_wasStarted.store(wasStarted, std::memory_order_relaxed);
 	}
 
 	friend class Thread;
@@ -46,7 +52,8 @@ public:
 
 	bool isRunning() const
 	{
-		return getThreadCount() > 0;
+		// čerstvě vytvořené procesy, u kterých se hlavní vlákno ještě nespustilo, jsou také běžící
+		return getThreadCount() > 0 || m_wasStarted.load(std::memory_order_relaxed) == false;
 	}
 
 	const std::string & getName() const
@@ -120,7 +127,7 @@ public:
 
 			const HandleReference & handleRef = *it;
 
-			if (!callback(id, handleRef, i))
+			if (!callback(handleRef, i))
 			{
 				return false;
 			}

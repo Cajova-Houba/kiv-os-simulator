@@ -14,7 +14,7 @@ EStatus FatFS::query(const Path & path, FileInfo *pInfo)
 
 	// TODO
 
-	return EStatus::SUCCESS;
+	return EStatus::UNKNOWN_ERROR;
 }
 
 EStatus FatFS::read(const Path & path, char *buffer, size_t bufferSize, uint64_t offset, size_t *pRead)
@@ -23,7 +23,7 @@ EStatus FatFS::read(const Path & path, char *buffer, size_t bufferSize, uint64_t
 
 	// TODO
 
-	return EStatus::SUCCESS;
+	return EStatus::UNKNOWN_ERROR;
 }
 
 EStatus FatFS::readDir(const Path & path, DirectoryEntry *entries, size_t entryCount, size_t offset, size_t *pRead)
@@ -32,7 +32,7 @@ EStatus FatFS::readDir(const Path & path, DirectoryEntry *entries, size_t entryC
 
 	// TODO
 
-	return EStatus::SUCCESS;
+	return EStatus::UNKNOWN_ERROR;
 }
 
 EStatus FatFS::write(const Path & path, const char *buffer, size_t bufferSize, uint64_t offset, size_t *pWritten)
@@ -41,7 +41,7 @@ EStatus FatFS::write(const Path & path, const char *buffer, size_t bufferSize, u
 
 	// TODO
 
-	return EStatus::SUCCESS;
+	return EStatus::UNKNOWN_ERROR;
 }
 
 EStatus FatFS::create(const Path & path, const FileInfo & info)
@@ -50,7 +50,7 @@ EStatus FatFS::create(const Path & path, const FileInfo & info)
 
 	// TODO
 
-	return EStatus::SUCCESS;
+	return EStatus::UNKNOWN_ERROR;
 }
 
 EStatus FatFS::resize(const Path & path, uint64_t size)
@@ -59,7 +59,7 @@ EStatus FatFS::resize(const Path & path, uint64_t size)
 
 	// TODO
 
-	return EStatus::SUCCESS;
+	return EStatus::UNKNOWN_ERROR;
 }
 
 EStatus FatFS::remove(const Path & path)
@@ -68,5 +68,5 @@ EStatus FatFS::remove(const Path & path)
 
 	// TODO
 
-	return EStatus::SUCCESS;
+	return EStatus::UNKNOWN_ERROR;
 }

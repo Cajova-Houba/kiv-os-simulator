@@ -1,29 +1,51 @@
+#include <thread>
+#include <new>
+
 #include "thread.h"
 #include "process.h"
 #include "kernel.h"
 
-struct ThreadData
+struct ThreadEnvironment
 {
 	HandleReference self;
 	HandleReference process;
 };
 
-static thread_local ThreadData g_threadData;
+static thread_local ThreadEnvironment *g_pThreadEnv;
+
+struct ThreadEnvironmentGuard
+{
+	ThreadEnvironmentGuard(HandleID threadID, HandleID processID)
+	{
+		g_pThreadEnv = new ThreadEnvironment;
+
+		g_pThreadEnv->self    = Kernel::GetHandleStorage().getHandle(threadID);
+		g_pThreadEnv->process = Kernel::GetHandleStorage().getHandle(processID);
+	}
+
+	~ThreadEnvironmentGuard()
+	{
+		delete g_pThreadEnv;
+		g_pThreadEnv = nullptr;
+	}
+};
 
 void Thread::Start(TEntryFunc entry, kiv_hal::TRegisters context, HandleID threadID, HandleID processID)
 {
-	g_threadData.self    = Kernel::GetHandleStorage().getHandle(threadID);
-	g_threadData.process = Kernel::GetHandleStorage().getHandle(processID);
+	ThreadEnvironmentGuard environment(threadID, processID);
 
 	Thread & self = Thread::Get();
 	Process & process = Thread::GetProcess();
 
-	self.m_isRunning = true;
+	self.setRunning(true);
+	self.setStarted(true);
 
 	Kernel::GetEventSystem().dispatchEvent(Event::THREAD_START, threadID);
 
 	if (process.incrementThreadCount() == 1)
 	{
+		process.setStarted(true);
+
 		// aktuální vlákno je první vlákno procesu
 		Kernel::GetEventSystem().dispatchEvent(Event::PROCESS_START, processID);
 	}
@@ -38,7 +60,7 @@ void Thread::Start(TEntryFunc entry, kiv_hal::TRegisters context, HandleID threa
 	// ==  Konec vlákna  ==
 	// ====================
 
-	self.m_isRunning = false;
+	self.setRunning(false);
 
 	Kernel::GetEventSystem().dispatchEvent(Event::THREAD_END, threadID);
 
@@ -47,47 +69,46 @@ void Thread::Start(TEntryFunc entry, kiv_hal::TRegisters context, HandleID threa
 		// aktuální vlákno je poslední běžící vlákno procesu
 		Kernel::GetEventSystem().dispatchEvent(Event::PROCESS_END, processID);
 	}
-
-	g_threadData.process.release();
-	g_threadData.self.release();
 }
 
 HandleReference Thread::Create(TEntryFunc entry, const kiv_hal::TRegisters & context, HandleID processID)
 {
-	HandleReference thread = Kernel::GetHandleStorage().addHandle(std::make_unique<Thread>());
-	if (!thread)
+	HandleReference threadHandle = Kernel::GetHandleStorage().addHandle(std::make_unique<Thread>());
+	if (!threadHandle)
 	{
 		return HandleReference();
 	}
 
-	thread.as<Thread>()->m_thread = std::thread(Start, entry, context, thread.getID(), processID);
+	std::thread thread(Start, entry, context, threadHandle.getID(), processID);
 
-	return thread;
+	thread.detach();
+
+	return threadHandle;
 }
 
 bool Thread::HasContext()
 {
-	return g_threadData.self.isValid();
+	return g_pThreadEnv->self.isValid();
 }
 
 Thread & Thread::Get()
 {
-	return *g_threadData.self.as<Thread>();
+	return *g_pThreadEnv->self.as<Thread>();
 }
 
 HandleID Thread::GetID()
 {
-	return g_threadData.self.getID();
+	return g_pThreadEnv->self.getID();
 }
 
 Process & Thread::GetProcess()
 {
-	return *g_threadData.process.as<Process>();
+	return *g_pThreadEnv->process.as<Process>();
 }
 
 HandleID Thread::GetProcessID()
 {
-	return g_threadData.process.getID();
+	return g_pThreadEnv->process.getID();
 }
 
 void Thread::SetExitCode(int exitCode)
@@ -104,18 +125,18 @@ void Thread::SetSignalEnabled(kiv_os::NSignal_Id signal, bool isEnabled)
 {
 	Thread & self = Thread::Get();
 
-	const uint32_t signalFlag = 0x1 << static_cast<uint8_t>(signal);
+	const uint32_t signalBit = 0x1 << (static_cast<uint8_t>(signal) - 1);
 
 	if (isEnabled)
 	{
-		self.m_signalMask |= signalFlag;
+		self.m_signalMask |= signalBit;
 	}
 	else
 	{
-		self.m_signalMask &= ~signalFlag;
+		self.m_signalMask &= ~signalBit;
 	}
 
-	self.m_pendingSignals &= ~signalFlag;
+	self.m_pendingSignals &= ~signalBit;
 }
 
 void Thread::HandleSignals()
@@ -135,12 +156,12 @@ void Thread::HandleSignals()
 
 	for (unsigned int i = 0; i < 32; i++)
 	{
-		const uint32_t signalFlag = 0x1 << i;
+		const uint32_t signalBit = 0x1 << i;
 
-		if (pendingSignals & signalFlag && self.m_signalMask & signalFlag)
+		if (pendingSignals & signalBit && self.m_signalMask & signalBit)
 		{
 			kiv_hal::TRegisters context;
-			context.rcx.e = i;
+			context.rcx.e = i + 1;
 
 			self.m_signalHandler(context);
 		}
