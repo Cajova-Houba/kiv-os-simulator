@@ -4,11 +4,11 @@ RTL_DEFINE_SHELL_PROGRAM(echo)
 
 int echo_main(const char *args)
 {
-	std::string result;
-	result += args;
-	result += '\n';
+	StringBuffer<4096> buffer;
+	buffer += args;
+	buffer += '\n';
 
-	if (!RTL::WriteStdOut(result))
+	if (!RTL::WriteStdOut(buffer))
 	{
 		return 1;
 	}
