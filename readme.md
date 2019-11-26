@@ -81,5 +81,5 @@ exit
     - [ ] shutdown
     - [ ] sort
     - [ ] tasklist
-    - [ ] type
+    - [x] type
 
