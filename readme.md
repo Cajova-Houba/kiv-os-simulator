@@ -78,7 +78,7 @@ exit
     - [x] md
     - [x] rd
     - [ ] rgen
-    - [ ] shutdown
+    - [x] shutdown
     - [ ] sort
     - [ ] tasklist
     - [x] type

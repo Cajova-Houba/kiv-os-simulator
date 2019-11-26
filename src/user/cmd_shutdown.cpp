@@ -4,7 +4,7 @@ RTL_DEFINE_SHELL_PROGRAM(shutdown)
 
 int shutdown_main(const char *args)
 {
-	// TODO
+	RTL::Shutdown();
 
 	return 0;
 }
