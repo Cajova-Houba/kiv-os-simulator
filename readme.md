@@ -75,7 +75,7 @@ exit
     - [x] echo
     - [ ] find
     - [ ] freq
-    - [ ] md
+    - [x] md
     - [ ] rd
     - [ ] rgen
     - [ ] shutdown
