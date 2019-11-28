@@ -10,11 +10,12 @@ class FatFS : public IFileSystem
 {
 	std::mutex m_mutex;
 	uint8_t m_diskNumber;
+	kiv_hal::TDrive_Parameters m_diskParams;
 
 public:
 	FatFS(uint8_t diskNumber)
 	: m_mutex(),
-	  m_diskNumber(diskNumber)
+	  m_diskNumber(diskNumber) 
 	{
 	}
 
@@ -29,5 +30,8 @@ public:
 	EStatus create(const Path & path, const FileInfo & info) override;
 	EStatus resize(const Path & path, uint64_t size) override;
 	EStatus remove(const Path & path) override;
+
+private:
+	uint16_t loadFat(const Boot_record& fatBootRec, std::vector<int32_t>& fatTable);
 };
 
