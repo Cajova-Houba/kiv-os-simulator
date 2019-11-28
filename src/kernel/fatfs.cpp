@@ -297,7 +297,7 @@ EStatus FatFS::remove(const Path & path)
 		isError = delete_file(m_diskNumber, fatBootRec, &(fatTable[0]), parentDir, fileToDelete);
 	}
 
-	return EStatus::UNKNOWN_ERROR;
+	return FsErrorToStatus(isError);
 }
 
 uint16_t FatFS::loadFat(const Boot_record& fatBootRec, std::vector<int32_t>& fatTable)
