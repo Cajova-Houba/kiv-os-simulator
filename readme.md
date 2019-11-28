@@ -79,7 +79,7 @@ exit
     - [x] rd
     - [ ] rgen
     - [x] shutdown
-    - [ ] sort
+    - [x] sort
     - [x] tasklist
     - [x] type
 
