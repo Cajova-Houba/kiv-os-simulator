@@ -58,26 +58,26 @@ exit
 
 - [x] Boot
   - [x] Refactoring
-- [ ] Kernel
+- [x] Kernel
   - [x] Handle system
   - [x] Procesy + vlákna + signály
   - [x] Události (waitFor)
   - [x] Roura
-  - [ ] File system
+  - [x] File system
     - [x] Jednotné API + syscally
     - [x] procfs
     - [x] FAT
-- [ ] User-space
+- [x] User-space
   - [x] RTL
   - [x] Shell
-  - [ ] Příkazy
+  - [x] Příkazy
     - [x] dir
     - [x] echo
     - [x] find
     - [x] freq
     - [x] md
     - [x] rd
-    - [ ] rgen
+    - [x] rgen
     - [x] shutdown
     - [x] sort
     - [x] tasklist
