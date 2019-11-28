@@ -150,10 +150,7 @@ EStatus FatFS::write(const Path & path, const char *buffer, size_t bufferSize, u
 
 	// zapis
 	if (!isError) {
-		isError = write_file(m_diskNumber, fatBootRec, &(fatTable[0]), fileToWriteTo, offset, buffer, bufferSize);
-
-		// todo:
-		*pWritten = bufferSize;
+		isError = write_file(m_diskNumber, fatBootRec, &(fatTable[0]), fileToWriteTo, offset, buffer, bufferSize, pWritten);
 	}
 
 	// update zaznamu souboru v parent adresari
