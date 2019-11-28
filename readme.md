@@ -80,6 +80,6 @@ exit
     - [ ] rgen
     - [x] shutdown
     - [ ] sort
-    - [ ] tasklist
+    - [x] tasklist
     - [x] type
 
