@@ -5,6 +5,7 @@
 #include "../api/hal.h"  // kiv_hal::TDrive_Parameters
 
 #include "file_system.h"
+#include "fat.h"
 
 class FatFS : public IFileSystem
 {

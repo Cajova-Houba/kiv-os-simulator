@@ -323,8 +323,7 @@ namespace Filesystem {
 		Boot_record fatBootRec;
 		uint16_t isError = 0;
 		std::vector<std::string> filePathItems;
-		Directory newFile,
-			parentDir,
+		Directory parentDir,
 			tmp;
 		kiv_hal::TDrive_Parameters parameters;
 		uint32_t matchCounter;

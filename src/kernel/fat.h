@@ -376,7 +376,7 @@ uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & b
 /**
  * @brief Zapise dany pocet clusteru z bufferu na disk. Predpoklada se, ze velikost buffer je >= poctu zapisovanych bytu.
  */
-uint16_t write_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char* buffer);
+uint16_t write_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, const char* buffer);
 
 /**
  * @brief Zavola syscall na cteni z disku a data ulozi do buffer.
@@ -390,7 +390,7 @@ uint16_t read_from_disk(const std::uint8_t diskNumber, const uint64_t startSecto
  * @return
  *  FsError::SUCCESS Pokud zapis probehne v poradku.
  */
-uint16_t write_to_disk(const std::uint8_t diskNumber, const uint64_t startSector, const uint64_t sectorCount, char* buffer);
+uint16_t write_to_disk(const std::uint8_t diskNumber, const uint64_t startSector, const uint64_t sectorCount, const char* buffer);
 
 /**
  * @brief Vrati cislo prvniho datoveho sektoru na disku (ve FAT cluster 0).

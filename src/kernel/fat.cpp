@@ -791,7 +791,7 @@ uint16_t read_cluster_range(const std::uint8_t diskNumber, const Boot_record & b
 	return FsError::SUCCESS;
 }
 
-uint16_t write_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, char * buffer)
+uint16_t write_cluster_range(const std::uint8_t diskNumber, const Boot_record & bootRecord, const int32_t cluster, const uint32_t clusterCount, const char * buffer)
 {
 	uint64_t startSector = first_data_sector(bootRecord) + cluster * bootRecord.cluster_size;
 	uint64_t sectorCount = clusterCount * bootRecord.cluster_size;
@@ -821,14 +821,14 @@ uint16_t read_from_disk(const std::uint8_t diskNumber, const uint64_t startSecto
 	return FsError::SUCCESS;
 }
 
-uint16_t write_to_disk(const std::uint8_t diskNumber, const uint64_t startSector, const uint64_t sectorCount, char * buffer)
+uint16_t write_to_disk(const std::uint8_t diskNumber, const uint64_t startSector, const uint64_t sectorCount, const char * buffer)
 {
 	kiv_hal::TRegisters registers;
 	kiv_hal::TDisk_Address_Packet addressPacket;
 
 	addressPacket.lba_index = startSector;	// zacni na sektoru 
 	addressPacket.count = sectorCount;		// zapis x sektoru
-	addressPacket.sectors = buffer;			// data pro zapis
+	addressPacket.sectors = (char *)buffer;			// data pro zapis
 
 	registers.rax.h = static_cast<uint8_t>(kiv_hal::NDisk_IO::Write_Sectors);		// jakou operaci nad diskem provest
 	registers.rdi.r = reinterpret_cast<uint64_t>(&addressPacket);					// info pro cteni dat
@@ -871,7 +871,7 @@ uint16_t resize_file(const std::uint8_t diskNumber, const Boot_record& bootRecor
 		newClusterCount = 1;
 	}
 
-	fileToResize.size = newSize;
+	fileToResize.size = (uint32_t)newSize;
 	if (newSize > oldSize) {
 		dirDirty = true;
 
