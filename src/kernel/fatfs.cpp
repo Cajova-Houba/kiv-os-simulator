@@ -5,13 +5,13 @@
 
 EStatus FatFS::init(const kiv_hal::TDrive_Parameters & diskParams)
 {
-	EStatus isError = FsErrorToStatus(init_fat(m_diskNumber, diskParams));
+	uint16_t isError = init_fat(m_diskNumber, diskParams);
 
-	if (isError == EStatus::SUCCESS) {
+	if (!isError) {
 		this->m_diskParams = diskParams;
 	}
 
-	return FsErrorToStatus(init_fat(m_diskNumber, diskParams));
+	return FsErrorToStatus(isError);
 }
 
 EStatus FatFS::query(const Path & path, FileInfo *pInfo)
@@ -170,12 +170,10 @@ EStatus FatFS::create(const Path & path, const FileInfo & info)
 
 	Boot_record fatBootRec;
 	uint16_t isError = 0;
-	std::vector<std::string> filePathItems;
 	Directory newFile,
 		parentDir,
 		tmp;
 	std::vector<int32_t> fatTable;
-	kiv_hal::TDrive_Parameters parameters;
 	uint32_t matchCounter;
 
 	// kontrola cesty a delky jmena
@@ -192,31 +190,31 @@ EStatus FatFS::create(const Path & path, const FileInfo & info)
 
 	// nacti BR
 	if (!isError) {
-		isError = load_boot_record(m_diskNumber, parameters, fatBootRec);
+		isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
 	}
 
 	// nacti FAT
 	if (!isError) {
-		isError = this->loadFat(fatBootRec, &(fatTable[0]));
+		isError = this->loadFat(fatBootRec, fatTable);
 	}
 
 	// vytvoreni souboru
 	if (!isError) {
-		// posledni item z filePathItems a pouzij ho jako jmeno noveho souboru
+		// posledni item z path pouzij jako jmeno noveho souboru
 		memset(newFile.name, 0, MAX_NAME_LEN);
-		memcpy(newFile.name, filePathItems[filePathItems.size() - 1].c_str(), MAX_NAME_LEN - 1);
-		newFile.flags = info.attributes;
+		memcpy(newFile.name, path.get()[path.get().size() - 1].c_str(), MAX_NAME_LEN - 1);
+		newFile.flags = (uint8_t)info.attributes;
 
 		// najdi soubor a jeho rodicovksy adresar
-		// pokud metoda vrati FILE_NOT_FOUND a matchCounter bude roven filePathItems.size() - 1
+		// pokud metoda vrati FILE_NOT_FOUND a matchCounter bude roven path.size() - 1
 		// vime ze rodicovsky adresar byl nalezen a lze v nem vytvori cilovy soubor
 		// pokud metoda vrati SUCCESS, vime ze cilovy soubor jiz existuje a je treba vratit chybu
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), filePathItems, tmp, parentDir, matchCounter);
+		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), tmp, parentDir, matchCounter);
 		if (isError == FsError::SUCCESS) {
 			isError = FsError::FILE_ALREADY_EXISTS;
 		}
 		else if (isError == FsError::FILE_NOT_FOUND &&
-			(matchCounter == filePathItems.size() - 1)) {
+			(matchCounter == path.get().size() - 1)) {
 			// soubor nenalezen a match counter ma spravnou velikost hodnotu -> nalezen parrent dir
 			isError = create_file(m_diskNumber, fatBootRec, &(fatTable[0]), parentDir, newFile);
 		}
@@ -292,7 +290,7 @@ EStatus FatFS::remove(const Path & path)
 
 	// najdi soubor
 	if (!isError) {
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToResize, parentDir, matchCounter);
+		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToDelete, parentDir, matchCounter);
 	}
 
 	if (!isError) {
