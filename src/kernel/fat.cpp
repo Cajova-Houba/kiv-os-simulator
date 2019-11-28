@@ -254,7 +254,7 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 	return isError;
 }
 
-uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, Directory & fileToWriteTo, const size_t offset, char * buffer, const size_t bufferLen)
+uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, Directory & fileToWriteTo, const size_t offset, const char * buffer, const size_t bufferLen)
 {
 	if (is_dir(fileToWriteTo)) {
 		return FsError::NOT_A_FILE;
