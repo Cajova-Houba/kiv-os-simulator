@@ -73,7 +73,7 @@ exit
   - [ ] Příkazy
     - [x] dir
     - [x] echo
-    - [ ] find
+    - [x] find
     - [ ] freq
     - [x] md
     - [x] rd
