@@ -30,6 +30,7 @@ int rd_main(const char *args)
 
 				switch (param)
 				{
+					case 's':
 					case 'S':  // odstranit i adresáře, ve kterých něco je
 					{
 						recursively = true;
