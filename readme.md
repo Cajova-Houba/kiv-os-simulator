@@ -66,7 +66,7 @@ exit
   - [ ] File system
     - [x] Jednotné API + syscally
     - [x] procfs
-    - [ ] FAT
+    - [x] FAT
 - [ ] User-space
   - [x] RTL
   - [x] Shell
