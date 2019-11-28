@@ -74,7 +74,7 @@ exit
     - [x] dir
     - [x] echo
     - [x] find
-    - [ ] freq
+    - [x] freq
     - [x] md
     - [x] rd
     - [ ] rgen
