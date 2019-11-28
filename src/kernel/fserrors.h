@@ -16,6 +16,7 @@ enum FsError : uint16_t
 	INCOMPATIBLE_DISK,			// pokud se pokousime initializovat FS na divnem disku (napr velikost sektoru 1b)
 	FILE_ALREADY_EXISTS,		// pokousime se vytvorit soubor ktery uz existuje
 	FILE_NAME_TOO_LONG,
+	DIR_NOT_EMPTY,
 
 	UNKNOWN_ERROR = 0xFFFF
 };
@@ -50,6 +51,10 @@ inline EStatus FsErrorToStatus(uint16_t err)
 		case INCOMPATIBLE_DISK:
 		{
 			return EStatus::IO_ERROR;
+		}
+		case DIR_NOT_EMPTY: 
+		{
+			return EStatus::DIRECTORY_NOT_EMPTY;
 		}
 		case UNKNOWN_ERROR:
 		{

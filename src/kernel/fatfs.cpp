@@ -268,6 +268,7 @@ EStatus FatFS::remove(const Path & path)
 	Directory fileToDelete;
 	Directory parentDir;
 	std::vector<int32_t> fatTable;
+	std::vector<Directory> dirItems;
 	uint32_t matchCounter;
 
 	// root nemuzeme resizenout
@@ -288,6 +289,14 @@ EStatus FatFS::remove(const Path & path)
 	// najdi soubor
 	if (!isError) {
 		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToDelete, parentDir, matchCounter);
+	}
+
+	// kontrola, ze adresar je prazdny
+	if (!isError && is_dir(fileToDelete)) {
+		isError = load_items_in_dir(m_diskNumber, fatBootRec, &(fatTable[0]), fileToDelete, dirItems);
+		if (!isError && !dirItems.empty()) {
+			isError = FsError::DIR_NOT_EMPTY;
+		}
 	}
 
 	if (!isError) {
