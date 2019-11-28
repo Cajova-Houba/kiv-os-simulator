@@ -45,12 +45,16 @@ static bool PrintStdIn()
 	bool hasEOF = false;
 	while (!hasEOF)
 	{
-		if (!RTL::ReadStdIn(buffer, sizeof buffer, &length) || length == 0)
+		if (!RTL::ReadStdIn(buffer, sizeof buffer, &length))
 		{
 			return false;
 		}
 
-		if (Util::IsEOF(buffer[length-1]))
+		if (length == 0)
+		{
+			hasEOF = true;
+		}
+		else if (Util::IsEOF(buffer[length-1]))
 		{
 			hasEOF = true;
 			length--;
