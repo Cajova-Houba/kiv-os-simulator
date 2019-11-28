@@ -233,10 +233,15 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 	bytesRead = 0;
 	for (i = 0; i < chunks.size() && !bufferFull; i++) {
 		// pokud uz je cilovy buffer plny a cely cluster se do nej nevejde,
+		// nebo jsme precetli cely soubor
 		// nacti jen to co muzes
 		currBytesToRead = chunks[i][1] * bytesPerCluster - currOffset;
 		if (bytesRead + currBytesToRead > bufferLen) {
 			currBytesToRead = bufferLen - bytesRead;
+			bufferFull = true;
+		}
+		else if (bytesRead + currBytesToRead > fileToRead.size) {
+			currBytesToRead = fileToRead.size - bytesRead;
 			bufferFull = true;
 		}
 
