@@ -173,6 +173,12 @@ constexpr size_t max_items_in_dir(const size_t dirSizeBytes) {
 }
 
 /**
+ * @brief Zmeni velikost souboru. Z disku se realnce nic nemaze, pouze se upravuje FAT a polozka Directory.size.
+ *	Pri zvetseni souboru se prazdne misto vyplni 0.
+ */
+uint16_t resize_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fat, const Directory & parentDirectory, Directory & fileToResize, const size_t newSize);
+
+/**
  * @brief Zkontroluje jestli je zadany bootRecord validni.
  */
 bool is_valid_fat(Boot_record & bootRecord);

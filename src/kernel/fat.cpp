@@ -850,6 +850,68 @@ uint64_t first_data_sector(const Boot_record & bootRecord)
 		/ (float)bootRecord.bytes_per_sector);
 }
 
+uint16_t resize_file(const std::uint8_t diskNumber, const Boot_record& bootRecord, int32_t* fat, const Directory& parentDirectory, Directory& fileToResize, const size_t newSize)
+{
+	const size_t bytesPerCluster = bytes_per_cluster(bootRecord);
+	const size_t currentClusterCount = (size_t)ceil(fileToResize.size / (float)bytesPerCluster);
+	size_t newClusterCount = (size_t)ceil(newSize / (float)bytesPerCluster);
+	const std::string origFileName(fileToResize.name, MAX_NAME_LEN);
+	const size_t oldSize = fileToResize.size;
+	bool fatDirty = false,
+		dirDirty = false;
+	size_t clusterCounter = 0;
+	int32_t currCluster = fileToResize.start_cluster,
+		tmpCluster = 0;
+	uint16_t isError = FsError::SUCCESS;
+	char nullBuffer[1] = { '\0' };
+
+
+	// kazdy soubor ma alespon 1 cluster
+	if (newClusterCount == 0) {
+		newClusterCount = 1;
+	}
+
+	fileToResize.size = newSize;
+	if (newSize > oldSize) {
+		dirDirty = true;
+
+		// v podstate je treba zapsat newSize - oldSize 0 na konec souboru
+		// coz se da prevest jako zapis 1 0 na offsetu newSize-1
+		isError = write_file(diskNumber, bootRecord, fat, fileToResize, newSize - 1, nullBuffer, 1);
+	}
+	else if (newSize < oldSize) {
+		dirDirty = true;
+		if (newClusterCount < currentClusterCount) {
+			// je potreba dealokovat clustery
+			fatDirty = true;
+
+			clusterCounter = 1;
+			while (currCluster != FAT_FILE_END) {
+				tmpCluster = currCluster;
+				currCluster = fat[currCluster];
+
+				if (clusterCounter > newClusterCount) {
+					fat[tmpCluster] = FAT_UNUSED;
+				}
+
+				clusterCounter++;
+			}
+		}
+	}
+
+	// update dir polozku
+	if (!isError && dirDirty) {
+		isError = update_file_in_dir(diskNumber, bootRecord, fat, parentDirectory, origFileName, fileToResize);
+	}
+
+	// update fat
+	if (!isError && fatDirty) {
+		isError = update_fat(diskNumber, bootRecord, fat);
+	}
+
+	return isError;
+}
+
 bool is_valid_fat(Boot_record & bootRecord)
 {
 	return bootRecord.usable_cluster_count > 0;
