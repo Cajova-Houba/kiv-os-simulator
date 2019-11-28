@@ -126,18 +126,14 @@ int dir_main(const char *args)
 	}
 	else
 	{
-		const std::string & firstDir = directories.front();
-
-		RTL::WriteStdOutFormat("%s:\n", firstDir.c_str());
-		ListDirectory(firstDir);
-
-		for (size_t i = 1; i < directories.size(); i++)
+		for (const std::string & dir : directories)
 		{
-			const std::string & dir = directories[i];
-
 			RTL::WriteStdOutFormat("\n%s:\n", dir.c_str());
+
 			ListDirectory(dir);
 		}
+
+		RTL::WriteStdOut("\n");
 	}
 
 	return 0;
