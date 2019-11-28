@@ -259,7 +259,7 @@ uint16_t read_file(const std::uint8_t diskNumber, const Boot_record & bootRecord
 	return isError;
 }
 
-uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, Directory & fileToWriteTo, const size_t offset, const char * buffer, const size_t bufferLen)
+uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecord, int32_t * fatTable, Directory & fileToWriteTo, const size_t offset, const char * buffer, const size_t bufferLen, size_t * bytesWritten)
 {
 	if (is_dir(fileToWriteTo)) {
 		return FsError::NOT_A_FILE;
@@ -332,6 +332,9 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 
 	// zapis data
 	// musi se spravne zapsat od offsetu
+	if (bytesWritten != nullptr) {
+		*bytesWritten += writtenBytes;
+	}
 	writtenBytes = 0;
 
 	// nastavi bytesToWrite na velikost, ktera v 
@@ -388,6 +391,10 @@ uint16_t write_file(const std::uint8_t diskNumber, const Boot_record & bootRecor
 	// spravne nastaveni velikosti souboru
 	if (offset + bufferLen > fileToWriteTo.size) {
 		fileToWriteTo.size = (uint32_t)(offset + bufferLen);
+	}
+
+	if (bytesWritten != nullptr) {
+		*bytesWritten += writtenBytes;
 	}
 
 	// update FAT
@@ -869,6 +876,7 @@ uint16_t resize_file(const std::uint8_t diskNumber, const Boot_record& bootRecor
 		tmpCluster = 0;
 	uint16_t isError = FsError::SUCCESS;
 	char nullBuffer[1] = { '\0' };
+	size_t wb = 0;
 
 
 	// kazdy soubor ma alespon 1 cluster
