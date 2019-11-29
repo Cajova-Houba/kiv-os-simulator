@@ -134,7 +134,7 @@ EStatus PipeReadEnd::read(char *buffer, size_t bufferSize, size_t *pRead)
 
 	size_t readLength = 0;
 
-	while (m_readerPos != m_writerPos && readLength < bufferSize)
+	while ((m_readerPos != m_writerPos || m_isFull) && readLength < bufferSize)
 	{
 		size_t length = (m_readerPos < m_writerPos) ? m_writerPos - m_readerPos : m_buffer.size() - m_readerPos;
 
@@ -152,10 +152,7 @@ EStatus PipeReadEnd::read(char *buffer, size_t bufferSize, size_t *pRead)
 		{
 			m_readerPos = 0;
 		}
-	}
 
-	if (readLength > 0)
-	{
 		m_isFull = false;
 	}
 
