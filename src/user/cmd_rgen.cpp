@@ -34,10 +34,10 @@ static int WorkerMain(void *param)
 static bool WaitForEOF()
 {
 	char buffer[256];
-	size_t length;
 
 	while (true)
 	{
+		size_t length = 0;
 		if (!RTL::ReadStdIn(buffer, sizeof buffer, &length))
 		{
 			return false;

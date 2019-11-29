@@ -8,11 +8,11 @@ using Table = std::array<uint32_t, 256>;
 static bool ReadInput(Table & table)
 {
 	char buffer[4096];
-	size_t length;
 
 	bool hasEOF = false;
 	while (!hasEOF)
 	{
+		size_t length = 0;
 		if (!RTL::ReadStdIn(buffer, sizeof buffer, &length))
 		{
 			return false;

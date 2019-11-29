@@ -4,11 +4,11 @@
 static bool ReadInput(uint64_t & lineCount)
 {
 	char buffer[4096];
-	size_t length;
 
 	bool hasEOF = false;
 	while (!hasEOF)
 	{
+		size_t length = 0;
 		if (!RTL::ReadStdIn(buffer, sizeof buffer, &length))
 		{
 			return false;

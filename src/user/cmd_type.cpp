@@ -21,6 +21,7 @@ static bool PrintFile(const std::string & name)
 
 	do
 	{
+		length = 0;
 		if (!file.read(buffer, sizeof buffer, &length))
 		{
 			ShowFileError(name);
@@ -40,11 +41,11 @@ static bool PrintFile(const std::string & name)
 static bool PrintStdIn()
 {
 	char buffer[4096];
-	size_t length;
 
 	bool hasEOF = false;
 	while (!hasEOF)
 	{
+		size_t length = 0;
 		if (!RTL::ReadStdIn(buffer, sizeof buffer, &length))
 		{
 			return false;
