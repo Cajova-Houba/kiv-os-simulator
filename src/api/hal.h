@@ -106,8 +106,8 @@ namespace kiv_hal {
 		uint16_t bytes_per_sector;
 	};
 
-	//sluzby VGA biosu, cislo sluzby patri do ah
-	enum class NKeyboard {
+	//sluzby klavesnice, cislo sluzby patri do ah
+	enum class NKeyboard : std::uint8_t {
 		Peek_Char = 1,			//otestuj, zda je na vstupu znak; neblokujici volani
 								//OUT: je-li  na vstupu je znak, pak je nastavena vlajka TRegisters::Flags::non_zero
 								//		ad nasledujici Read_Char, NCOntrol_Codes::EOT spolu se shozenou TRegisters::Flags::non_zero je povazovan za platnou kombinaci, tj. znak na vstupu
@@ -118,7 +118,7 @@ namespace kiv_hal {
 								//			b) doslo k chybe cteni z klavesnice
 	};
 
-	enum NControl_Codes : std::uint8_t {
+	enum class NControl_Codes : std::uint8_t {
 		NUL = 0,		//null, aneb end of string
 		ETX = 3,		//end of text, aneb Ctrl+C
 		EOT = 4,		//end of transmission, aneb Ctrl+D
@@ -129,7 +129,7 @@ namespace kiv_hal {
 		SUB = 26		//substitue, aneb Ctrl+Z aneb EOF DOSu
 	};
 
-	enum NDisk_Status : std::uint_fast8_t {
+	enum class NDisk_Status : std::uint8_t {
 		No_Error = 0,
 		Bad_Command,
 		Address_Mark_Not_Found_Or_Bad_Sector,

@@ -33,7 +33,7 @@ static bool HALReadChar(char & ch)
 
 	ch = context.rax.l;
 
-	if (!context.flags.non_zero && ch != kiv_hal::NControl_Codes::EOT)
+	if (!context.flags.non_zero && ch != static_cast<char>(kiv_hal::NControl_Codes::EOT))
 	{
 		return false;
 	}

@@ -71,12 +71,12 @@ static char ReadChar()
 
 	if (!status)
 	{
-		return kiv_hal::NControl_Codes::EOT;
+		return static_cast<char>(kiv_hal::NControl_Codes::EOT);
 	}
 
 	if (read == 0)
 	{
-		return kiv_hal::NControl_Codes::NUL;
+		return static_cast<char>(kiv_hal::NControl_Codes::NUL);
 	}
 
 	return ch;
@@ -95,7 +95,7 @@ void __stdcall Keyboard::InterruptHandler(kiv_hal::TRegisters & context)
 		{
 			char ch = ReadChar();
 			context.rax.x = ch;
-			context.flags.non_zero = (ch == kiv_hal::NControl_Codes::EOT) ? 0 : 1;
+			context.flags.non_zero = (ch == static_cast<char>(kiv_hal::NControl_Codes::EOT)) ? 0 : 1;
 			break;
 		}
 		default:
