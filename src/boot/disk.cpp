@@ -6,6 +6,7 @@
 
 #include "disk.h"
 #include "cmos.h"
+#include "util.h"
 
 #ifdef _MSC_VER
 #define COMPILER_MSVC
@@ -142,7 +143,9 @@ public:
 	{
 		m_isReadOnly = params.isReadOnly;
 
-		m_pFile = FOpen(params.diskImage.c_str(), (m_isReadOnly) ? "rb" : "r+b");
+		const std::string filePath = Util::GetApplicationDirectory() + params.diskImage;
+
+		m_pFile = FOpen(filePath.c_str(), (m_isReadOnly) ? "rb" : "r+b");
 		if (m_pFile)
 		{
 			if (std::fseek(m_pFile, 0, SEEK_END) == 0)
