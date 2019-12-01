@@ -50,4 +50,9 @@ namespace Util
 	{
 		return SetDirectoryEntry(entry, attributes, name.c_str(), name.length());
 	}
+
+	inline uint64_t DivCeil(uint64_t numerator, uint64_t denominator)
+	{
+		return numerator / denominator + (numerator % denominator != 0);
+	}
 }

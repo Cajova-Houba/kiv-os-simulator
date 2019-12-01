@@ -5,7 +5,6 @@
 #include "../api/hal.h"  // kiv_hal::TDrive_Parameters
 
 #include "file_system.h"
-#include "fat.h"
 
 class FatFS : public IFileSystem
 {
@@ -16,7 +15,8 @@ class FatFS : public IFileSystem
 public:
 	FatFS(uint8_t diskNumber)
 	: m_mutex(),
-	  m_diskNumber(diskNumber) 
+	  m_diskNumber(diskNumber),
+	  m_diskParams()
 	{
 	}
 
@@ -31,8 +31,4 @@ public:
 	EStatus create(const Path & path, const FileInfo & info) override;
 	EStatus resize(const Path & path, uint64_t size) override;
 	EStatus remove(const Path & path) override;
-
-private:
-	uint16_t loadFat(const Boot_record& fatBootRec, std::vector<int32_t>& fatTable);
 };
-

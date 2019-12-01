@@ -1,313 +1,366 @@
 #include "fatfs.h"
 #include "fat.h"
-#include <vector>
-#include <string.h>
+#include "util.h"
 
 EStatus FatFS::init(const kiv_hal::TDrive_Parameters & diskParams)
 {
-	uint16_t isError = init_fat(m_diskNumber, diskParams);
+	m_diskParams = diskParams;
 
-	if (!isError) {
-		this->m_diskParams = diskParams;
+	FAT::BootRecord bootRecord;
+	std::vector<int32_t> fatTable;
+
+	// disk uz mozna obsahuje souborovy system FAT
+	EStatus status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return FAT::Init(m_diskNumber, m_diskParams);
 	}
 
-	return FsErrorToStatus(isError);
+	return EStatus::SUCCESS;
 }
 
 EStatus FatFS::query(const Path & path, FileInfo *pInfo)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	Boot_record fatBootRec;
-	uint16_t isError = 0;
+	EStatus status;
+	FAT::BootRecord bootRecord;
 	std::vector<int32_t> fatTable;
-	Directory fileToRead;
-	Directory parentDir;
+
+	status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
+	}
+
+	FAT::Directory file;
+	FAT::Directory parentDirectory;
 	uint32_t matchCounter;
 
-	// nacti BR
-	isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
-
-	// nacti FAT
-	if (!isError) {
-		isError = this->loadFat(fatBootRec, fatTable);
-	}
-
 	// najdi soubor
-	if (!isError) {
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToRead, parentDir, matchCounter);
+	status = FAT::FindFile(m_diskNumber, bootRecord, fatTable.data(), path.get(), file, parentDirectory, matchCounter);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
-	if (!isError) {
-		pInfo->size = fileToRead.size;
-		pInfo->attributes = fileToRead.flags;
+	if (pInfo)
+	{
+		pInfo->size = file.size;
+		pInfo->attributes = file.flags;
 	}
 
-	return FsErrorToStatus(isError);
+	return EStatus::SUCCESS;
 }
 
 EStatus FatFS::read(const Path & path, char *buffer, size_t bufferSize, uint64_t offset, size_t *pRead)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	Boot_record fatBootRec;
-	uint16_t isError = 0;
+	EStatus status;
+	FAT::BootRecord bootRecord;
 	std::vector<int32_t> fatTable;
-	Directory fileToRead;
-	Directory parentDir;
+
+	status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
+	}
+
+	FAT::Directory file;
+	FAT::Directory parentDirectory;
 	uint32_t matchCounter;
 
-	// nacti BR
-	isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
-
-	// nacti FAT
-	if (!isError) {
-		isError = this->loadFat(fatBootRec, fatTable);
-	}
-
 	// najdi soubor
-	if (!isError) {
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToRead, parentDir, matchCounter);
+	status = FAT::FindFile(m_diskNumber, bootRecord, fatTable.data(), path.get(), file, parentDirectory, matchCounter);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
+
+	size_t read = 0;
 
 	// precti soubor
-	if (!isError) {
-		isError = read_file(m_diskNumber, fatBootRec, &(fatTable[0]), fileToRead, buffer, bufferSize, *pRead, offset);
+	status = FAT::ReadFile(m_diskNumber, bootRecord, fatTable.data(), file, buffer, bufferSize, read, offset);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
-	return FsErrorToStatus(isError);
+	if (pRead)
+	{
+		(*pRead) = read;
+	}
+
+	return EStatus::SUCCESS;
 }
 
 EStatus FatFS::readDir(const Path & path, DirectoryEntry *entries, size_t entryCount, size_t offset, size_t *pRead)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	Boot_record fatBootRec;
-	uint16_t isError = 0;
-	Directory dir;
-	Directory parentDir;
-	uint32_t matchCounter;
+	EStatus status;
+	FAT::BootRecord bootRecord;
 	std::vector<int32_t> fatTable;
-	std::vector<Directory> dirItems;
 
-	// nacti BR
-	isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
-
-	// nacti FAT
-	if (!isError) {
-		isError = this->loadFat( fatBootRec, fatTable);
+	status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
+
+	FAT::Directory directory;
+	FAT::Directory parentDirectory;
+	uint32_t matchCounter;
 
 	// rozdel fileName na jmena
-	if (!isError) {
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), dir, parentDir, matchCounter);
+	status = FAT::FindFile(m_diskNumber, bootRecord, fatTable.data(), path.get(), directory, parentDirectory, matchCounter);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
+
+	std::vector<FAT::Directory> items;
 
 	// nacti itemy a vrat vysledek
-	if (!isError) {
-		isError = load_items_in_dir(m_diskNumber, fatBootRec, &(fatTable[0]), dir, dirItems);
+	status = FAT::ReadDirectory(m_diskNumber, bootRecord, fatTable.data(), directory, items);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
-	if (!isError) {
-		*pRead = 0;
-		for (Directory& dirEntry : dirItems) {
-			DirectoryEntry de;
-			de.attributes = dirEntry.flags;
-			strcpy_s(de.name, MAX_NAME_LEN, dirEntry.name);
-			de.name[MAX_NAME_LEN] = '\0';
+	size_t read = 0;
 
-			entries[*pRead] = de;
-			*pRead = (*pRead) + 1;
+	for (const FAT::Directory & entry : items)
+	{
+		if (offset > 0)
+		{
+			offset--;
+		}
+		else
+		{
+			Util::SetDirectoryEntry(entries[read++], entry.flags, entry.name);
 		}
 	}
 
-	return FsErrorToStatus(isError);
+	if (pRead)
+	{
+		(*pRead) = read;
+	}
+
+	return EStatus::SUCCESS;
 }
 
 EStatus FatFS::write(const Path & path, const char *buffer, size_t bufferSize, uint64_t offset, size_t *pWritten)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	Boot_record fatBootRec;
-	uint16_t isError = 0;
-	Directory fileToWriteTo;
-	Directory parentDir;
+	EStatus status;
+	FAT::BootRecord bootRecord;
 	std::vector<int32_t> fatTable;
+
+	status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
+	}
+
+	FAT::Directory file;
+	FAT::Directory parentDirectory;
 	uint32_t matchCounter;
 
-	// nacti BR
-	isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
-
-	// nacti FAT
-	if (!isError) {
-		isError = this->loadFat(fatBootRec, fatTable);
-	}
-
 	// najdi soubor
-	if (!isError) {
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToWriteTo, parentDir, matchCounter);
+	status = FAT::FindFile(m_diskNumber, bootRecord, fatTable.data(), path.get(), file, parentDirectory, matchCounter);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
+
+	size_t written = 0;
 
 	// zapis
-	if (!isError) {
-		isError = write_file(m_diskNumber, fatBootRec, &(fatTable[0]), fileToWriteTo, offset, buffer, bufferSize, pWritten);
+	status = FAT::WriteFile(m_diskNumber, bootRecord, fatTable.data(), file, buffer, bufferSize, written, offset);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
 	// update zaznamu souboru v parent adresari
-	if (!isError) {
-		isError = update_file_in_dir(m_diskNumber, fatBootRec, &(fatTable[0]), parentDir, fileToWriteTo.name, fileToWriteTo);
+	status = FAT::UpdateFile(m_diskNumber, bootRecord, fatTable.data(), parentDirectory, file.name, file);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
-	return FsErrorToStatus(isError);
+	if (pWritten)
+	{
+		(*pWritten) = written;
+	}
+
+	return EStatus::SUCCESS;
 }
 
 EStatus FatFS::create(const Path & path, const FileInfo & info)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	Boot_record fatBootRec;
-	uint16_t isError = 0;
-	Directory newFile,
-		parentDir,
-		tmp;
+	// kontrola cesty a delky jmena
+	if (path.isEmpty())
+	{
+		// nemuzeme znova vytvorit root
+		return EStatus::INVALID_ARGUMENT;
+	}
+
+	// posledni item z path pouzij jako jmeno noveho souboru
+	const std::string & fileName = path.get().back();
+
+	// novy soubor nebo adresar
+	FAT::Directory file;
+	file.flags = static_cast<uint8_t>(info.attributes);
+
+	if (fileName.length() >= sizeof file.name)
+	{
+		return EStatus::INVALID_ARGUMENT;
+	}
+
+	for (size_t i = 0; i < sizeof file.name; i++)
+	{
+		file.name[i] = (i < fileName.length()) ? fileName[i] : '\0';
+	}
+
+	EStatus status;
+	FAT::BootRecord bootRecord;
 	std::vector<int32_t> fatTable;
+
+	status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
+	}
+
+	FAT::Directory parentDirectory;
+	FAT::Directory tmp;
 	uint32_t matchCounter;
 
-	// kontrola cesty a delky jmena
-	if (path.get().size() == 0) {
-		// nemuzeme znova vytvorit root
-		isError = FsError::UNKNOWN_ERROR;
+	// najdi soubor a jeho rodicovksy adresar
+	// pokud metoda vrati FILE_NOT_FOUND a matchCounter bude roven path.getComponentCount() - 1
+	// vime ze rodicovsky adresar byl nalezen a lze v nem vytvori cilovy soubor
+	// pokud metoda vrati SUCCESS, vime ze cilovy soubor jiz existuje a je treba vratit chybu
+	status = FAT::FindFile(m_diskNumber, bootRecord, fatTable.data(), path.get(), tmp, parentDirectory, matchCounter);
+	if (status == EStatus::SUCCESS)
+	{
+		// soubor nebo adresar uz existuje
+		return EStatus::INVALID_ARGUMENT;
+	}
+	else if (status != EStatus::FILE_NOT_FOUND || matchCounter != path.getComponentCount()-1)
+	{
+		return status;
 	}
 
-	if (!isError) {
-		if (path.get()[path.get().size() - 1].size() > MAX_NAME_LEN - 1) {
-			isError =  FsError::FILE_NAME_TOO_LONG;
-		}
+	// soubor nenalezen a match counter ma spravnou velikost hodnotu -> nalezen parrent dir
+	status = FAT::CreateFile(m_diskNumber, bootRecord, fatTable.data(), parentDirectory, file);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
-	// nacti BR
-	if (!isError) {
-		isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
-	}
-
-	// nacti FAT
-	if (!isError) {
-		isError = this->loadFat(fatBootRec, fatTable);
-	}
-
-	// vytvoreni souboru
-	if (!isError) {
-		// posledni item z path pouzij jako jmeno noveho souboru
-		memset(newFile.name, 0, MAX_NAME_LEN);
-		memcpy(newFile.name, path.get()[path.get().size() - 1].c_str(), MAX_NAME_LEN - 1);
-		newFile.flags = (uint8_t)info.attributes;
-
-		// najdi soubor a jeho rodicovksy adresar
-		// pokud metoda vrati FILE_NOT_FOUND a matchCounter bude roven path.size() - 1
-		// vime ze rodicovsky adresar byl nalezen a lze v nem vytvori cilovy soubor
-		// pokud metoda vrati SUCCESS, vime ze cilovy soubor jiz existuje a je treba vratit chybu
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), tmp, parentDir, matchCounter);
-		if (isError == FsError::SUCCESS) {
-			isError = FsError::FILE_ALREADY_EXISTS;
-		}
-		else if (isError == FsError::FILE_NOT_FOUND &&
-			(matchCounter == path.get().size() - 1)) {
-			// soubor nenalezen a match counter ma spravnou velikost hodnotu -> nalezen parrent dir
-			isError = create_file(m_diskNumber, fatBootRec, &(fatTable[0]), parentDir, newFile);
-		}
-	}
-
-	return FsErrorToStatus(isError);
+	return EStatus::SUCCESS;
 }
 
 EStatus FatFS::resize(const Path & path, uint64_t size)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	Boot_record fatBootRec;
-	uint16_t isError = 0;
-	Directory fileToResize;
-	Directory parentDir;
+	// root nemuzeme resizenout
+	if (path.isEmpty())
+	{
+		return EStatus::INVALID_ARGUMENT;
+	}
+
+	EStatus status;
+	FAT::BootRecord bootRecord;
 	std::vector<int32_t> fatTable;
+
+	status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
+	}
+
+	FAT::Directory file;
+	FAT::Directory parentDirectory;
 	uint32_t matchCounter;
 
-	// root nemuzeme resizenout
-	if (path.get().size() == 0) {
-		isError = FsError::UNKNOWN_ERROR;
-	}
-
-	// nacti BR
-	if (!isError) {
-		isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
-	}
-
-	// nacti FAT
-	if (!isError) {
-		isError = this->loadFat(fatBootRec, fatTable);
-	}
-
 	// najdi soubor
-	if (!isError) {
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToResize, parentDir, matchCounter);
+	status = FAT::FindFile(m_diskNumber, bootRecord, fatTable.data(), path.get(), file, parentDirectory, matchCounter);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
 	// resize
-	if (!isError) {
-		isError = resize_file(m_diskNumber, fatBootRec, &(fatTable[0]), parentDir, fileToResize, size);
+	status = FAT::ResizeFile(m_diskNumber, bootRecord, fatTable.data(), parentDirectory, file, size);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
-	return FsErrorToStatus(isError);
+	return EStatus::SUCCESS;
 }
 
 EStatus FatFS::remove(const Path & path)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
-	Boot_record fatBootRec;
-	uint16_t isError = 0;
-	Directory fileToDelete;
-	Directory parentDir;
+	// root nemuzeme odstranit
+	if (path.isEmpty())
+	{
+		return EStatus::INVALID_ARGUMENT;
+	}
+
+	EStatus status;
+	FAT::BootRecord bootRecord;
 	std::vector<int32_t> fatTable;
-	std::vector<Directory> dirItems;
+
+	status = FAT::Load(m_diskNumber, m_diskParams, bootRecord, fatTable);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
+	}
+
+	FAT::Directory file;
+	FAT::Directory parentDirectory;
 	uint32_t matchCounter;
 
-	// root nemuzeme resizenout
-	if (path.get().size() == 0) {
-		isError = FsError::UNKNOWN_ERROR;
-	}
-
-	// nacti BR
-	if (!isError) {
-		isError = load_boot_record(m_diskNumber, m_diskParams, fatBootRec);
-	}
-
-	// nacti FAT
-	if (!isError) {
-		isError = this->loadFat(fatBootRec, fatTable);
-	}
-
 	// najdi soubor
-	if (!isError) {
-		isError = find_file(m_diskNumber, fatBootRec, &(fatTable[0]), path.get(), fileToDelete, parentDir, matchCounter);
+	status = FAT::FindFile(m_diskNumber, bootRecord, fatTable.data(), path.get(), file, parentDirectory, matchCounter);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
 	// kontrola, ze adresar je prazdny
-	if (!isError && is_dir(fileToDelete)) {
-		isError = load_items_in_dir(m_diskNumber, fatBootRec, &(fatTable[0]), fileToDelete, dirItems);
-		if (!isError && !dirItems.empty()) {
-			isError = FsError::DIR_NOT_EMPTY;
+	if (file.isDirectory())
+	{
+		std::vector<FAT::Directory> items;
+
+		status = FAT::ReadDirectory(m_diskNumber, bootRecord, fatTable.data(), file, items);
+		if (status != EStatus::SUCCESS)
+		{
+			return status;
+		}
+
+		if (!items.empty())
+		{
+			return EStatus::DIRECTORY_NOT_EMPTY;
 		}
 	}
 
-	if (!isError) {
-		isError = delete_file(m_diskNumber, fatBootRec, &(fatTable[0]), parentDir, fileToDelete);
+	status = FAT::DeleteFile(m_diskNumber, bootRecord, fatTable.data(), parentDirectory, file);
+	if (status != EStatus::SUCCESS)
+	{
+		return status;
 	}
 
-	return FsErrorToStatus(isError);
-}
-
-uint16_t FatFS::loadFat(const Boot_record& fatBootRec, std::vector<int32_t>& fatTable)
-{
-	fatTable.resize(fatBootRec.usable_cluster_count);
-	return load_fat(m_diskNumber, fatBootRec, &(fatTable[0]));
+	return EStatus::SUCCESS;
 }
