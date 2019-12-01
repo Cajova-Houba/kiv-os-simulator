@@ -34,7 +34,7 @@ EStatus File::read(char *buffer, size_t bufferSize, size_t *pRead)
 			DirectoryEntry *entries = reinterpret_cast<DirectoryEntry*>(buffer);
 			size_t entryCount = bufferSize / sizeof (DirectoryEntry);
 
-			status = Kernel::GetFileSystem().readDir(m_path, entries, entryCount, m_pos, &read);
+			status = Kernel::GetFileSystem().readDir(m_path, entries, entryCount, static_cast<size_t>(m_pos), &read);
 			m_pos += read;
 
 			read *= sizeof (DirectoryEntry);

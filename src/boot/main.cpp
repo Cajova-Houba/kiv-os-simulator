@@ -35,7 +35,7 @@ static bool Setup_HW()
 	return true;
 }
 
-int main()
+int __cdecl main()
 {
 	if (!Setup_HW())
 	{

@@ -25,7 +25,7 @@ static size_t CopyValue(const std::string & value, char *buffer, size_t bufferSi
 		return 0;
 	}
 
-	length -= offset;
+	length -= static_cast<size_t>(offset);
 
 	if (length > bufferSize)
 	{

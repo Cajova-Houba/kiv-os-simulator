@@ -63,7 +63,7 @@ void __stdcall VGA::InterruptHandler(kiv_hal::TRegisters & context)
 		}
 		case kiv_hal::NVGA_BIOS::Write_String:
 		{
-			WriteString(reinterpret_cast<const char*>(context.rdx.r), context.rcx.r);
+			WriteString(reinterpret_cast<const char*>(context.rdx.r), static_cast<size_t>(context.rcx.r));
 			break;
 		}
 		default:

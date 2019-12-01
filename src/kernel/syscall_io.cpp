@@ -109,7 +109,7 @@ static EStatus Open(const char *pathString, uint8_t flags, uint16_t attributes, 
 	return EStatus::SUCCESS;
 }
 
-static EStatus Write(HandleID id, const char *buffer, size_t bufferSize, size_t & written)
+static EStatus Write(HandleID id, const char *buffer, uint64_t bufferSize, uint64_t & result)
 {
 	if (buffer == nullptr || bufferSize == 0)
 	{
@@ -122,10 +122,15 @@ static EStatus Write(HandleID id, const char *buffer, size_t bufferSize, size_t 
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	return handle.as<IFileHandle>()->write(buffer, bufferSize, &written);
+	size_t written = 0;
+	EStatus status = handle.as<IFileHandle>()->write(buffer, static_cast<size_t>(bufferSize), &written);
+
+	result = written;
+
+	return status;
 }
 
-static EStatus Read(HandleID id, char *buffer, size_t bufferSize, size_t & read)
+static EStatus Read(HandleID id, char *buffer, uint64_t bufferSize, uint64_t & result)
 {
 	if (buffer == nullptr || bufferSize == 0)
 	{
@@ -138,7 +143,12 @@ static EStatus Read(HandleID id, char *buffer, size_t bufferSize, size_t & read)
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	return handle.as<IFileHandle>()->read(buffer, bufferSize, &read);
+	size_t read = 0;
+	EStatus status = handle.as<IFileHandle>()->read(buffer, static_cast<size_t>(bufferSize), &read);
+
+	result = read;
+
+	return status;
 }
 
 static EStatus Seek(HandleID id, uint16_t type, int64_t offset, uint64_t & result)
@@ -216,14 +226,14 @@ static EStatus SetWorkingDirectory(const char *pathString)
 	return EStatus::SUCCESS;
 }
 
-static EStatus GetWorkingDirectory(char *buffer, size_t bufferSize, size_t & length)
+static EStatus GetWorkingDirectory(char *buffer, uint64_t bufferSize, uint64_t & result)
 {
 	if (buffer == nullptr || bufferSize == 0)
 	{
 		return EStatus::INVALID_ARGUMENT;
 	}
 
-	length = Thread::GetProcess().getWorkingDirectoryStringBuffer(buffer, bufferSize);
+	result = Thread::GetProcess().getWorkingDirectoryStringBuffer(buffer, static_cast<size_t>(bufferSize));
 
 	return EStatus::SUCCESS;
 }

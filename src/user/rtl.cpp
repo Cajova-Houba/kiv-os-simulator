@@ -299,7 +299,7 @@ std::string RTL::GetWorkingDirectory()
 		return std::string();
 	}
 
-	const size_t length = registers.rax.r;
+	const size_t length = static_cast<size_t>(registers.rax.r);
 
 	return std::string(buffer, length);
 }
@@ -463,7 +463,7 @@ bool RTL::ReadFile(kiv_os::THandle file, void *buffer, size_t size, size_t *pRea
 
 	if (pRead)
 	{
-		(*pRead) = registers.rax.r;
+		(*pRead) = static_cast<size_t>(registers.rax.r);
 	}
 
 	return true;
@@ -485,7 +485,7 @@ bool RTL::WriteFile(kiv_os::THandle file, const void *buffer, size_t size, size_
 
 	if (pWritten)
 	{
-		(*pWritten) = registers.rax.r;
+		(*pWritten) = static_cast<size_t>(registers.rax.r);
 	}
 
 	return true;
