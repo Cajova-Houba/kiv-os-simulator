@@ -1,17 +1,37 @@
+#include <cstdio>
 #include <cstring>
 #include <array>
 #include <memory>
 #include <vector>
-#include <fstream>
 
 #include "disk.h"
 #include "cmos.h"
+
+#ifdef _MSC_VER
+#define COMPILER_MSVC
+#endif
+
+static std::FILE *FOpen(const char *fileName, const char *mode)
+{
+	std::FILE *result = nullptr;
+
+#ifdef COMPILER_MSVC
+	if (fopen_s(&result, fileName, mode) != 0)  // nestandardní nesmysly od Microsoftu
+	{
+		result = nullptr;
+	}
+#else
+	result = std::fopen(fileName, mode);
+#endif
+
+	return result;
+}
 
 class IDiskDrive
 {
 protected:
 	size_t m_bytesPerSector;
-	size_t m_diskSize;
+	uint64_t m_diskSize;
 
 	void setStatus(kiv_hal::TRegisters & context, const kiv_hal::NDisk_Status status)
 	{
@@ -32,7 +52,7 @@ protected:
 	{
 		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		if (m_bytesPerSector * (pDAP->lba_index + pDAP->count) >= m_diskSize)
+		if (m_bytesPerSector * (pDAP->lba_index + pDAP->count) > m_diskSize)
 		{
 			// nemůžeme dovolit, výsledkem by byl přístup za velikost disku
 			setStatus(context, kiv_hal::NDisk_Status::Sector_Not_Found);
@@ -51,7 +71,13 @@ public:
 
 	void getDriveParameters(kiv_hal::TRegisters & context)
 	{
-		const size_t MB = 1024 * 1024;  // 1 MiB
+		if (m_diskSize == 0)
+		{
+			setStatus(context, kiv_hal::NDisk_Status::Drive_Not_Ready);
+			return;
+		}
+
+		const uint64_t MB = 1024 * 1024;  // 1 MiB
 
 		kiv_hal::TDrive_Parameters *pParams = reinterpret_cast<kiv_hal::TDrive_Parameters*>(context.rdi.r);
 		bool isAssistedTranslation = true;
@@ -107,22 +133,35 @@ public:
 class CDiskImage : public IDiskDrive
 {
 protected:
-	std::fstream m_diskImage;
+	std::FILE *m_pFile;
+	bool m_isReadOnly;
 
 public:
 	CDiskImage(const CMOS::DriveParameters & params)
 	: IDiskDrive(params)
 	{
-		auto open_mode = std::ios::binary | std::ios::in;
-		if (!params.isReadOnly)
+		m_isReadOnly = params.isReadOnly;
+
+		m_pFile = FOpen(params.diskImage.c_str(), (m_isReadOnly) ? "rb" : "r+b");
+		if (m_pFile)
 		{
-			open_mode |= std::ios::out;
+			if (std::fseek(m_pFile, 0, SEEK_END) == 0)
+			{
+				long pos = std::ftell(m_pFile);
+				if (pos >= 0)
+				{
+					m_diskSize = pos;
+				}
+			}
 		}
+	}
 
-		m_diskImage.open(params.diskImage, open_mode);
-
-		m_diskImage.seekg(0, std::ios::end);
-		m_diskSize = m_diskImage.tellg();
+	~CDiskImage()
+	{
+		if (m_pFile)
+		{
+			std::fclose(m_pFile);
+		}
 	}
 
 	void readSectors(kiv_hal::TRegisters & context) override
@@ -134,12 +173,18 @@ public:
 
 		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		const int64_t bytesToRead = pDAP->count * m_bytesPerSector;
+		const long offset = static_cast<long>(m_bytesPerSector * pDAP->lba_index);
 
-		m_diskImage.seekg(m_bytesPerSector * pDAP->lba_index, std::ios::beg);
-		m_diskImage.read(static_cast<char*>(pDAP->sectors), bytesToRead);
+		if (!m_pFile || std::fseek(m_pFile, offset, SEEK_SET) != 0)
+		{
+			setStatus(context, kiv_hal::NDisk_Status::Drive_Not_Ready);
+			return;
+		}
 
-		if (m_diskImage.gcount() == bytesToRead)
+		const size_t bytesToRead = static_cast<size_t>(pDAP->count * m_bytesPerSector);
+		const size_t bytesRead = std::fread(pDAP->sectors, 1, bytesToRead, m_pFile);
+
+		if (bytesRead == bytesToRead)
 		{
 			setStatus(context, kiv_hal::NDisk_Status::No_Error);
 		}
@@ -151,6 +196,12 @@ public:
 
 	void writeSectors(kiv_hal::TRegisters & context) override
 	{
+		if (m_isReadOnly)
+		{
+			setStatus(context, kiv_hal::NDisk_Status::Fixed_Disk_Write_Fault_On_Selected_Drive);
+			return;
+		}
+
 		if (!checkDAP(context))
 		{
 			return;
@@ -158,12 +209,16 @@ public:
 
 		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		const int64_t bytesToWrite = pDAP->count * m_bytesPerSector;
+		const long offset = static_cast<long>(m_bytesPerSector * pDAP->lba_index);
 
-		m_diskImage.seekg(m_bytesPerSector * pDAP->lba_index, std::ios::beg);
-		const auto before = m_diskImage.tellp();
-		m_diskImage.write(static_cast<char*>(pDAP->sectors), bytesToWrite);
-		const auto bytesWritten = m_diskImage.tellp() - before;
+		if (!m_pFile || std::fseek(m_pFile, offset, SEEK_SET) != 0)
+		{
+			setStatus(context, kiv_hal::NDisk_Status::Drive_Not_Ready);
+			return;
+		}
+
+		const size_t bytesToWrite = static_cast<size_t>(pDAP->count * m_bytesPerSector);
+		const size_t bytesWritten = std::fwrite(pDAP->sectors, 1, bytesToWrite, m_pFile);
 
 		if (bytesWritten == bytesToWrite)
 		{
@@ -186,7 +241,7 @@ public:
 	: IDiskDrive(params)
 	{
 		m_diskSize = params.RAMDiskSize;
-		m_buffer.resize(m_diskSize);
+		m_buffer.resize(static_cast<size_t>(m_diskSize));
 	}
 
 	void readSectors(kiv_hal::TRegisters & context) override
@@ -198,8 +253,8 @@ public:
 
 		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		const size_t pos = pDAP->lba_index * m_bytesPerSector;
-		const size_t length = pDAP->count * m_bytesPerSector;
+		const size_t pos = static_cast<size_t>(pDAP->lba_index * m_bytesPerSector);
+		const size_t length = static_cast<size_t>(pDAP->count * m_bytesPerSector);
 
 		std::memcpy(pDAP->sectors, m_buffer.data() + pos, length);
 
@@ -215,8 +270,8 @@ public:
 
 		kiv_hal::TDisk_Address_Packet *pDAP = reinterpret_cast<kiv_hal::TDisk_Address_Packet*>(context.rdi.r);
 
-		const size_t pos = pDAP->lba_index * m_bytesPerSector;
-		const size_t length = pDAP->count * m_bytesPerSector;
+		const size_t pos = static_cast<size_t>(pDAP->lba_index * m_bytesPerSector);
+		const size_t length = static_cast<size_t>(pDAP->count * m_bytesPerSector);
 
 		std::memcpy(m_buffer.data() + pos, pDAP->sectors, length);
 

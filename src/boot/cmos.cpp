@@ -4,7 +4,7 @@
 
 #define CMOS_CONFIG_DRIVE_RAM_DISK      "RAM_Disk"
 #define CMOS_CONFIG_DRIVE_RAM_DISK_SIZE "RAM_Disk_Size"
-#define CMOS_CONFIG_DRIVE_READ_ONLY     "Ready_Only"
+#define CMOS_CONFIG_DRIVE_READ_ONLY     "Read_Only"
 #define CMOS_CONFIG_DRIVE_DISK_IMAGE    "Disk_Image"
 
 static CSimpleIniA g_config;
