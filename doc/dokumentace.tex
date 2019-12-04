@@ -79,20 +79,40 @@
 	Každé vlákno simulovaného OS využívá reálné vlákno fyzického OS (\verb|std::thread|). Kernel dále neobsahuje žádný platform-specific kód, kromě načítání "user.dll". Za hlavní vlákno procesu se považuje jeho první vlákno. Při vytvoření procesu je vždy vytvořeno i jeho hlavní vlákno.
 	
 	\subsubsection{API}
-	\begin{itemize}
-		\item CreateProcess
-		\item Clone
-		\item CreateThread
-		\item WaitFor
-		\item GetExitCode
-		\item Exit
-		\item SetupSignal
-		\item SystemShutdown	
-	\end{itemize}
+	K API je přistupováno skrze systémová volání.
+	
+	\paragraph{Create Process}
+	Vytvoří nový proces.
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=14cm]{create-process-seq.pdf}
+		\caption{Sekvenční diagram vytvoření procesu}
+		\label{fig:create-process-seq}
+	\end{figure}
+	
+	\paragraph{Create Thread}
+	Vytvoří nové vlákno pro aktuální proces.
+	
+	\paragraph{Wait For}
+	Počká na konec procesu, nebo vlákna.
+	
+	\paragraph{Get Exit Code}
+	Získá exit kód procesu, nebo vlákna.
+	
+	\paragraph{Setup Signal}
+	Nastaví signal handler.
+	
+	\paragraph{Exit}
+	Nastaví exit kód aktuálímu vláknu.
+	
+	\paragraph{System Shutdown}
+	Pošle signál terminate na všechna vlákna v systému.
+
 	
 	\subsection{Filesystem}
 	
-	Kernel obsahuje file system manager, který spravuje disky a souborové systémy na nich uložené. Pro přístup na disk je použito abstraktní API, které každý ovladač pro FS. Struktura je znázorněna na obrázku \ref{fig:fs-layers}. Jako filesystem jsme zvolili FAT implementovanou v rámci KIV/ZOS.
+	Kernel obsahuje file system manager, který spravuje disky a souborové systémy na nich uložené. Pro přístup na disk je použito abstraktní API, které každý ovladač pro FS. Struktura je znázorněna na obrázku \ref{fig:fs-layers}. 
 	
 	\begin{figure}[H]
 		\centering
@@ -101,6 +121,34 @@
 		\label{fig:fs-layers}
 	\end{figure}
 	
+	\subsubsection{API}
+	API poskytované abstraktním file systemem.
+	
+	\paragraph{Create}
+	Vytvoří soubor.
+	
+	\paragraph{Query}
+	Získá info o souboru.
+	
+	\paragraph{Read}
+	Přečte soubor (nebo jeho část) do bufferu.
+	
+	\paragraph{ReadDir}
+	Načte soubory v adresáři.
+	
+	\paragraph{Remove}
+	Odstraní soubor, nebo adresář.
+	
+	\paragraph{Resize}
+	Změní velikost souboru.
+	
+	\paragraph{Write}
+	Zapíše data do souboru.
+	
+	\subsubsection{FAT}
+	
+	Jako filesystem jsme zvolili FAT implementovanou v rámci KIV/ZOS. Rozložení souborového systému na disku je znázorněno na obrázku \ref{fig:fat-disk-struct}. V původní specifikaci je na disku uložena alespoň jedna další kopie FAT tabulky, která se používá ke kontrole bloků dat. Protože kontrolu poškozených dat v práci neprovádíme, rozhodli jsme se ukládat pouze jednu kopii.
+	
 	\begin{figure}[H]
 		\centering
 		\includegraphics[width=12cm]{fat-rozdeleni-disku.pdf}
@@ -108,24 +156,23 @@
 		\label{fig:fat-disk-struct}
 	\end{figure}
 
+	Velikost jednoho datového clusteru je dána velikostí sektorů na disku a platí, že 1 cluster = N $\times$ sektor, kde $N$ je vypočítané při inicializaci souborového systému na disku. Root adresář začíná na clusteru 0. Metadata každého souboru jsou reprezentována strukturou \verb|Directory| (obrázek \ref{fig:dir-c}). Adresáře jsou od souborů odlišeny nastaveným bitem ve \verb|flags|.
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=3cm]{dir-c.pdf}
+		\caption{Struktura Directory}
+		\label{fig:dir-c}
+	\end{figure}
+
+
 	\subsubsection{ProcFS}
 	Na virtuálním disku 0. Používá se k získání právě běžících procesů.
-	
-	\subsubsection{API}
-	\begin{itemize}
-		\item Create
-		\item Query
-		\item Read
-		\item ReadDir
-		\item Remove
-		\item Resize
-		\item Write
-	\end{itemize}
 
 	
-	\subsection{Pipe}
+	\subsection{Roura}
 	
-	Pipe je vytvořena dvěma handly - \verb|PipeReadEnd| a \verb|PipeWriteEnd|. Viz obrázek \ref{fig:pipe-c}.
+	Roura je tvořena dvěma propojenými handly - \verb|PipeReadEnd| a \verb|PipeWriteEnd| viz obrázek \ref{fig:pipe-c}. Čtecí konec obsahuje buffer, do kterého se zapisuje ze zapisovacího konce (metoda \verb|push()|). Při uzavření jednoho konce se spojení mezi nimi přeruší a druhý konec tak ví, že už při prázdném bufferu nemá čekat na další data (čtecí konec) nebo při plném bufferu čekat na uvolnění místa (zapisovací konec).
 	
 	\begin{figure}[H]
 		\centering
@@ -137,6 +184,28 @@
 	\section{RTL}
 	
 	\section{Shell a uživatelské příkazy}
+	
+	\paragraph{dir}
+	
+	\paragraph{echo}
+	
+	\paragraph{find}
+	
+	\paragraph{freq}
+	
+	\paragraph{md}
+	
+	\paragraph{rd}
+	
+	\paragraph{rgen}
+	
+	\paragraph{shutdown}
+	
+	\paragraph{sort}
+	
+	\paragraph{tasklist}
+	
+	\paragraph{type}
 	
 	\section{Závěr}
 	
