@@ -122,7 +122,7 @@
 	\end{figure}
 	
 	\subsubsection{API}
-	API poskytované abstraktním file systemem.
+	API poskytované abstraktním file systemem (\verb|IFileSystem|). Přístup skrze syscall.
 	
 	\paragraph{Create}
 	Vytvoří soubor.
@@ -167,7 +167,22 @@
 
 
 	\subsubsection{ProcFS}
-	Na virtuálním disku 0. Používá se k získání právě běžících procesů.
+	TODO: tohle jsou v podstatě jen poznámky
+	
+	Na virtuálním disku 0. Používá se k získání právě běžících procesů. Implementováno pouze API \verb|query()|, \verb|read()| a \verb|readDir()|. Ostatní funkce vrací chybu \verb|PERMISSION_DENIED|.
+	
+	V root adresáři disku \verb|0:\| se nachází složky pojemnované podle \verb|HandleID| procesu. Každá složka procesu obsahuje soubory popisující proces: \verb|"args"| (agrumenty procesu z konzole), \verb|"cwd"| (současný working dir), \verb|"name"| (jméno procesu), \verb|"threads"| (počet vláken procesu).
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=3cm]{procfs-struct.pdf}
+		\caption{Struktura ProcFS}
+		\label{fig:procfs-struct}
+	\end{figure}
+	
+	Procesy možno listovat skrze \verb|readDir(path)|. Cesta \verb|0:\| vrátí handly všechny běžících procesů. Cesta \verb|0:\<HandleID>| vrátí obsah adresáře (jména výše zmíněných popisných souborů).
+	
+	Detaily procesu je možno získat skrze \verb|read(path)|. Cesta \verb|0:\self| vrátí detaily aktuálního procesu. Cesta \verb|0:\<HandleID>\<process_file_name>| vrátí obsah daného procesového souboru.
 
 	
 	\subsection{Roura}
