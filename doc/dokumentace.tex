@@ -97,6 +97,13 @@
 	\paragraph{Wait For}
 	Počká na konec procesu, nebo vlákna.
 	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=14cm]{wait-for-proc.pdf}
+		\caption{Sekvenční diagram čekání na vlákno, nebo proces}
+		\label{fig:wait-for-proc}
+	\end{figure}
+	
 	\paragraph{Get Exit Code}
 	Získá exit kód procesu, nebo vlákna.
 	
@@ -120,9 +127,11 @@
 		\caption{Struktura správy souborového systému}
 		\label{fig:fs-layers}
 	\end{figure}
+
+	\paragraph{Otevřené soubory} Handly uložených souborů jsou uložené ve výše zmíněném \verb|HandleStorage| -- třída \verb|File|, která představuje handle otevřeného souboru, dědí od \verb|IFileHandle|. K synchronizaci přístupu více vlákny je použit mutex (\verb|std::mutex|). 
 	
 	\subsubsection{API}
-	API poskytované abstraktním file systemem (\verb|IFileSystem|). Přístup skrze syscall.
+	K datům každého souborového systému je přistupováno skrze API definované v \verb|IFileSystem|. Uživatelská vrstva pak k API přistupuje skrze systémová volání.
 	
 	\paragraph{Create}
 	Vytvoří soubor.
@@ -167,11 +176,7 @@
 
 
 	\subsubsection{ProcFS}
-	TODO: tohle jsou v podstatě jen poznámky
-	
-	Na virtuálním disku 0. Používá se k získání právě běžících procesů. Implementováno pouze API \verb|query()|, \verb|read()| a \verb|readDir()|. Ostatní funkce vrací chybu \verb|PERMISSION_DENIED|.
-	
-	V root adresáři disku \verb|0:\| se nachází složky pojemnované podle \verb|HandleID| procesu. Každá složka procesu obsahuje soubory popisující proces: \verb|"args"| (agrumenty procesu z konzole), \verb|"cwd"| (současný working dir), \verb|"name"| (jméno procesu), \verb|"threads"| (počet vláken procesu).
+	Přístup k aktuálně běžícím procesům je realizován přes virtuální souborový systém, který je mapován na disk \verb|0:\|. Struktura je znázorněna na \ref{fig:procfs-struct}. V kořenovém adresáři existuje pro každý běžící proces adresář pojmenovaný podle \verb|HandleID| daného procesu. Adresář pak obsahuje popisné soubory, ze kterých je možné o procesu přečíst: parametry se kterými byl spuštěn, aktuální pracovní adresář, jméno a počet běžících vláken.
 	
 	\begin{figure}[H]
 		\centering
@@ -180,9 +185,9 @@
 		\label{fig:procfs-struct}
 	\end{figure}
 	
-	Procesy možno listovat skrze \verb|readDir(path)|. Cesta \verb|0:\| vrátí handly všechny běžících procesů. Cesta \verb|0:\<HandleID>| vrátí obsah adresáře (jména výše zmíněných popisných souborů).
+	\verb|ProcFS| dědí od \verb|IFileSystem| a implementuje tedy celé API pro přístup k datům. Všechny funkce kromě \verb|query()|, \verb|read()| a \verb|readDir()| vrací chybu \verb|PERMISSION_DENIED|. K vypsání všech běžících procesů lze použít funkce \verb|readDir(0:\)|.
 	
-	Detaily procesu je možno získat skrze \verb|read(path)|. Cesta \verb|0:\self| vrátí detaily aktuálního procesu. Cesta \verb|0:\<HandleID>\<process_file_name>| vrátí obsah daného procesového souboru.
+	Detaily libovolného procesu je možné získat voláním \verb|read(0:\<HandleID>\<proc_file_name>)|. Místo \verb|HandleID| lze použít \verb|self|, API pak vrací detaily o aktuálně běžícím procesu.
 
 	
 	\subsection{Roura}
@@ -197,8 +202,17 @@
 	\end{figure}
 	
 	\section{RTL}
+	Vrstva mezi uživatelskými programy a kernelem (nečekaně).
+	
+	TODO: něco napsat sem?
 	
 	\section{Shell a uživatelské příkazy}
+	
+	\subsection{Parser}
+	TODO: informace o parseru
+	
+	\subsection{Implementace příkazů}
+	TODO: nějaký krátký info k příkazům
 	
 	\paragraph{dir}
 	
@@ -223,5 +237,10 @@
 	\paragraph{type}
 	
 	\section{Závěr}
+	Simulátor operačního systému se nám podařilo úspěšně implementovat. 
+	
+	TODO: co bychom mohli příště udělat líp 
+	
+	TODO: co bylo nejzajímavější
 	
 \end{document}
