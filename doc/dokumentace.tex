@@ -212,9 +212,10 @@
 	TODO: informace o parseru
 	
 	\subsection{Implementace příkazů}
-	TODO: nějaký krátký info k příkazům
+	TODO: nějaký krátký info k příkazům, jak se předává vstup/výstup příkazům
 	
 	\paragraph{dir}
+	Vypíše na výstup seznam souborů v zadaném adresáři. Cest lze příkazu skrze parametry předat více. Příkaz otevře zadaný adresář funkcí \verb|OpenDirectory(path)| z RTL. Obsah adresáře je získán RTL funkcí \verb|GetDirectoryContent(dirHandle)|.
 	
 	\paragraph{echo}
 	
@@ -223,8 +224,10 @@
 	\paragraph{freq}
 	
 	\paragraph{md}
+	Vytvoří zadaný adresář. Adresářů lze skrze parametry předat více. Příkaz vytvoří adresář voláním funkce RTL \verb|CreateDirectory(path)|.
 	
 	\paragraph{rd}
+	Smaže zadaný soubor. Použitím parametru \verb|/S| lze rekurzivně mazat adresářové stromy. Soubor je smazán voláním funkce RTL \verb|DeleteDirectory(path)|.
 	
 	\paragraph{rgen}
 	
@@ -235,6 +238,7 @@
 	\paragraph{tasklist}
 	
 	\paragraph{type}
+	Vypíše na výstup obsah zadaných souborů. K otevření souboru je použita funkce RTL \verb|OpenFile(path)|, k získání obsahu pak \verb|ReadFile(handle, buffer)|.
 	
 	\section{Závěr}
 	Simulátor operačního systému se nám podařilo úspěšně implementovat. 
