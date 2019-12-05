@@ -4,15 +4,7 @@
 #include "../api/hal.h"
 
 #include "console.h"
-
-static void HALWriteChar(char ch)
-{
-	kiv_hal::TRegisters context;
-	context.rax.h = static_cast<uint8_t>(kiv_hal::NVGA_BIOS::Write_Control_Char);
-	context.rdx.l = ch;
-
-	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::VGA_BIOS, context);
-}
+#include "console_reader.h"
 
 static void HALWriteString(const char *buffer, size_t bufferSize)
 {
@@ -24,117 +16,25 @@ static void HALWriteString(const char *buffer, size_t bufferSize)
 	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::VGA_BIOS, context);
 }
 
-static bool HALReadChar(char & ch)
+Console::Console()
 {
-	kiv_hal::TRegisters context;
-	context.rax.h = static_cast<uint8_t>(kiv_hal::NKeyboard::Read_Char);
-
-	kiv_hal::Call_Interrupt_Handler(kiv_hal::NInterrupt::Keyboard, context);
-
-	ch = context.rax.l;
-
-	if (!context.flags.non_zero && ch != static_cast<char>(kiv_hal::NControl_Codes::EOT))
-	{
-		return false;
-	}
-
-	return true;
+	m_pReader = &ConsoleReader::GetInstance();
 }
 
-static int HALReadLine(char *buffer, size_t bufferSize)
+void Console::close()
 {
-	size_t length = 0;
-
-	while (length < bufferSize)
-	{
-		char ch;
-		if (!HALReadChar(ch))
-		{
-			return -1;
-		}
-
-		switch (ch)
-		{
-			case '\0':
-			{
-				return static_cast<int>(length);
-			}
-			case '\b':  // Backspace
-			{
-				if (length > 0)
-				{
-					length--;
-					HALWriteChar('\b');
-				}
-
-				break;
-			}
-			case '\n':
-			{
-				break;
-			}
-			case '\r':  // Enter
-			{
-				buffer[length++] = '\n';
-				HALWriteChar('\n');
-
-				return static_cast<int>(length);
-			}
-			case 3:     // Ctrl + C
-			case 4:     // Ctrl + D
-			case 26:    // Ctrl + Z
-			case '\t':  // Tabulátor
-			{
-				buffer[length++] = ch;
-
-				return static_cast<int>(length);
-			}
-			default:
-			{
-				buffer[length++] = ch;
-				HALWriteChar(ch);
-
-				break;
-			}
-		}
-	}
-
-	return static_cast<int>(length);
+	m_pReader->close();
 }
 
 EStatus Console::read(char *buffer, size_t bufferSize, size_t *pRead)
 {
-	if (buffer == nullptr || bufferSize == 0)
-	{
-		return EStatus::INVALID_ARGUMENT;
-	}
+	m_pReader->readLine(buffer, bufferSize, pRead);
 
-	std::lock_guard<std::mutex> lock(m_readerMutex);
-
-	EStatus status = EStatus::SUCCESS;
-
-	int length = HALReadLine(buffer, bufferSize);
-	if (length < 0)
-	{
-		length = 0;
-		status = EStatus::IO_ERROR;
-	}
-
-	if (pRead)
-	{
-		(*pRead) = length;
-	}
-
-	return status;
+	return EStatus::SUCCESS;
 }
 
 EStatus Console::write(const char *buffer, size_t bufferSize, size_t *pWritten)
 {
-	if (buffer == nullptr || bufferSize == 0)
-	{
-		return EStatus::INVALID_ARGUMENT;
-	}
-
 	std::lock_guard<std::mutex> lock(m_writerMutex);
 
 	HALWriteString(buffer, bufferSize);
@@ -175,7 +75,5 @@ void Console::logV(const char *format, va_list args)
 	buffer[length++] = '\n';
 	// výsledný řetězec už není ukončený nulou!
 
-	std::lock_guard<std::mutex> lock(m_writerMutex);
-
-	HALWriteString(buffer, length);
+	write(buffer, length, nullptr);
 }

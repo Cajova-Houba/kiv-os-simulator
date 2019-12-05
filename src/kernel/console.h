@@ -5,22 +5,22 @@
 #include "handle.h"
 #include "compiler.h"
 
+class ConsoleReader;
+
 class Console : public IFileHandle
 {
-	std::mutex m_readerMutex;
 	std::mutex m_writerMutex;
+	ConsoleReader *m_pReader;
 
 public:
-	Console() = default;
+	Console();
 
 	EFileHandle getFileHandleType() const override
 	{
 		return EFileHandle::CONSOLE;
 	}
 
-	void close() override
-	{
-	}
+	void close() override;
 
 	EStatus read(char *buffer, size_t bufferSize, size_t *pRead) override;
 	EStatus write(const char *buffer, size_t bufferSize, size_t *pWritten) override;

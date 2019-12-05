@@ -25,7 +25,10 @@ static int WorkerMain(void *param)
 	{
 		double number = distribution(generator);
 
-		RTL::WriteStdOutFormat("%f\n", number);
+		if (!RTL::WriteStdOutFormat("%f\n", number))
+		{
+			break;
+		}
 	}
 
 	return 0;

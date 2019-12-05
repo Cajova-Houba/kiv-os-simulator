@@ -89,6 +89,11 @@ void PipeReadEnd::close()
 {
 	std::unique_lock<std::mutex> lock(m_mutex);
 
+	if (m_isClosed)
+	{
+		return;
+	}
+
 	m_isClosed = true;
 
 	if (m_pWriteEnd)

@@ -156,18 +156,34 @@ static EStatus Exit(uint16_t exitCode)
 
 static EStatus SystemShutdown()
 {
-	// získáme handle na všechna uživatelská vlákna v systému
-	std::vector<HandleReference> threads = Kernel::GetHandleStorage().getHandles(
+	// získáme handle na všechna uživatelská vlákna v systému a všechny souborové handly
+	std::vector<HandleReference> handles = Kernel::GetHandleStorage().getHandles(
 		[](HandleID id, const IHandle *pHandle) -> bool
 		{
-			return pHandle->getHandleType() == EHandle::THREAD;
+			return pHandle->getHandleType() == EHandle::THREAD || pHandle->getHandleType() == EHandle::FILE;
 		}
 	);
 
-	// a pošleme všem signál Terminate
-	for (HandleReference & handle : threads)
+	// vláknům pošleme signál Terminate a soubory zavřeme
+	for (HandleReference & handle : handles)
 	{
-		handle.as<Thread>()->raiseSignal(kiv_os::NSignal_Id::Terminate);
+		switch (handle->getHandleType())
+		{
+			case EHandle::THREAD:
+			{
+				handle.as<Thread>()->raiseSignal(kiv_os::NSignal_Id::Terminate);
+				break;
+			}
+			case EHandle::FILE:
+			{
+				handle.as<IFileHandle>()->close();
+				break;
+			}
+			default:
+			{
+				break;
+			}
+		}
 	}
 
 	return EStatus::SUCCESS;
