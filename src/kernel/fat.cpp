@@ -305,15 +305,15 @@ namespace
 	{
 		uint64_t startSector = FirstDataSector(bootRecord) + cluster * bootRecord.cluster_size;
 		uint64_t sectorCount = clusterCount * bootRecord.cluster_size;
-		size_t bytesToRead = static_cast<size_t>(sectorCount) * bootRecord.bytes_per_sector;
+		size_t sectorBufferSize = static_cast<size_t>(sectorCount) * bootRecord.bytes_per_sector;
 
-		if (offset > bytesToRead)
+		if (offset > sectorBufferSize)
 		{
 			return EStatus::SUCCESS;
 		}
 
 		std::vector<char> sectorBuffer;
-		sectorBuffer.resize(static_cast<size_t>(sectorCount) * bootRecord.bytes_per_sector, 0);
+		sectorBuffer.resize(sectorBufferSize, 0);
 
 		// nacti sektory obsahujici 1 cluster do sectorBufferu
 		EStatus status = ReadFromDisk(diskNumber, startSector, sectorCount, sectorBuffer.data());
@@ -326,12 +326,15 @@ namespace
 		// ze sectorBufferu nacti cluster do bufferu
 		// pokud uz je cilovy buffer plny a cely cluster se do nej nevejde,
 		// nacti jen to co muzes
-		if (bytesToRead < bufferSize)
+		if (sectorBufferSize < bufferSize)
 		{
-			bytesToRead = bufferSize;
+			sectorBufferSize = bufferSize;
+		}
+		else if (bufferSize > 0 && (sectorBufferSize - offset) > bufferSize) {
+			sectorBufferSize = bufferSize + offset;
 		}
 
-		std::memcpy(buffer, sectorBuffer.data() + offset, bytesToRead - offset);
+		std::memcpy(buffer, sectorBuffer.data() + offset, sectorBufferSize - offset);
 
 		return EStatus::SUCCESS;
 	}
