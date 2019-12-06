@@ -399,6 +399,10 @@ bool Shell::prepareFiles(const ShellParser::Result & result, RTL::File & inputFi
 		{
 			outputFile.setSize(0);
 		}
+		else
+		{
+			outputFile.setPos(0, RTL::Position::END);
+		}
 	}
 
 	return true;
