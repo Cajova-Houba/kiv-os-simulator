@@ -38,6 +38,7 @@ size_t PipeReadEnd::push(const char *data, size_t dataLength)
 		{
 			if (m_pWriteEnd)
 			{
+				m_cv.notify_one();  // probudíme čtecí vlákno
 				m_cv.wait(lock);
 			}
 			else
