@@ -176,6 +176,7 @@
 
 
 	\subsubsection{ProcFS}
+	\label{sec:proc-fs}
 	Přístup k aktuálně běžícím procesům je realizován přes virtuální souborový systém, který je mapován na disk \verb|0:\|. Struktura je znázorněna na \ref{fig:procfs-struct}. V kořenovém adresáři existuje pro každý běžící proces adresář pojmenovaný podle \verb|HandleID| daného procesu. Adresář pak obsahuje popisné soubory, ze kterých je možné o procesu přečíst: parametry se kterými byl spuštěn, aktuální pracovní adresář, jméno a počet běžících vláken.
 	
 	\begin{figure}[H]
@@ -204,7 +205,7 @@
 	\section{RTL}
 	Vrstva mezi uživatelskými programy a kernelem (nečekaně).
 	
-	TODO: něco napsat sem?
+	TODO: něco napsat sem? Asi o práci se vstupem/výstupem
 	
 	\section{Shell a uživatelské příkazy}
 	
@@ -218,10 +219,13 @@
 	Vypíše na výstup seznam souborů v zadaném adresáři. Cest lze příkazu skrze parametry předat více. Příkaz otevře zadaný adresář funkcí \verb|OpenDirectory(path)| z RTL. Obsah adresáře je získán RTL funkcí \verb|GetDirectoryContent(dirHandle)|.
 	
 	\paragraph{echo}
+	Vypíše text ze vstupu na výstup. Echo lze vypnout příkazem \verb|@echo off| (a zapnout \verb|@echo on|). Proměnná, která drží stav echa je uložena v každé instanci shellu zvlášť. K výpisu na výstup je použita funkce RTL \verb|WriteFile(handle)|.
 	
 	\paragraph{find}
+	Najde zadaný text v souboru. Parametry \verb|/C| \verb|/V|.
 	
 	\paragraph{freq}
+	Čte vstup dokud nepřijde EOF a udělá statistiku, kolikrát byl který byte na vstupu přítomen. Po dokončení statistiky je výsledek vypsán na výstup. 
 	
 	\paragraph{md}
 	Vytvoří zadaný adresář. Adresářů lze skrze parametry předat více. Příkaz vytvoří adresář voláním funkce RTL \verb|CreateDirectory(path)|.
@@ -230,12 +234,16 @@
 	Smaže zadaný soubor. Použitím parametru \verb|/S| lze rekurzivně mazat adresářové stromy. Soubor je smazán voláním funkce RTL \verb|DeleteDirectory(path)|.
 	
 	\paragraph{rgen}
+	Generuje náhodná čísla v rozmezí $<0;1)$, která vypisuje na výstup. Čísla jsou generována dokud na vstupu není EOF.
 	
 	\paragraph{shutdown}
+	Vypne systém voláním funkce RTL \verb|Shutdown()|.
 	
 	\paragraph{sort}
+	Čte řádky ze vstupu a řadí je. Po přečtení EOF vypíše seřazené řádky na výstup.
 	
 	\paragraph{tasklist}
+	Zavolá \verb|OpenDirectory("0:")| čímž otevře vituální disk 0 (viz sekce \ref{sec:proc-fs}), načte jeho obsah (\verb|GetDirectoryContent()|) a vypíše jej na výstup.
 	
 	\paragraph{type}
 	Vypíše na výstup obsah zadaných souborů. K otevření souboru je použita funkce RTL \verb|OpenFile(path)|, k získání obsahu pak \verb|ReadFile(handle, buffer)|.
