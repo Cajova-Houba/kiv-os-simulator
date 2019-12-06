@@ -36,11 +36,11 @@
 		\begin{enumerate}
 			\item echo, cd, dir, md, rd, type, find /v /c"" (tj. co dělá wc v unix-like prostředí), sort, tasklist, shutdown
 			
-			\begin{enumerate}
+			\begin{itemize}
 				\item	cd musí umět relativní cesty
 				\item	echo musí umět @echo on a off
 				\item	type musí umět vypsat jak stdin, tak musí umět vypsat soubor
-			\end{enumerate}
+			\end{itemize}
 		
 			\item	Dále vytvoříte programy rgen a freq
 			\item	rgen bude vypisovat náhodně vygenerovaná čísla v plovoucí čárce na stdout, dokud mu nepřijde znak Ctrl+Z //EOF
@@ -49,36 +49,34 @@
 		\item 	Implementujte roury a přesměrování
 		\item 	Nebudete přistupovat na souborový systém, ale použijete simulovaný disk
 		
-		\begin{enumerate}
+		\begin{itemize}
 			\item 	Za 5 bonusových bodů můžete k realizaci souborového systému použít semestrální práci z KIV/ZOS - tj. implementace FAT.
-		\end{enumerate}
+		\end{itemize}
 	\end{enumerate}
 
 	\section{Kernel}
 	Jádro poskytuje API pro správu procesů a vláken, vytvoření pipe a přístup k disku, ke kterému je možné z user space přistoupit systémovým voláním.
 	
-	\subsection{Handlery}
+	\subsection{Handle}
 	
-	Základním konceptem kernelu je třída \verb|HandleStorage| společně s \verb|HandleReference|. Každá třída reprezentující nějaký handle (soubor, proces, vlákno, ...) implementuje rozhraní \verb|IHandle|. Všechny instance těchto tříd jsou následně uloženy uvnitř \verb|HandleStorage|, kde jim je přiřazeno jejich unikátní \verb|HandleID| (16 bitové číslo). Přístup k uloženým handle je následně možný pouze přes objekty \verb|HandleReference|. Struktura handlerů je znázorněna diagramem tříd na obrázku \ref{fig:handle-class-d}.
+	Základním konceptem kernelu je třída \verb|HandleStorage| společně s \verb|HandleReference|. Každá třída reprezentující nějaký handle (soubor, proces, vlákno, ...) implementuje rozhraní \verb|IHandle|. Všechny instance těchto tříd jsou následně uloženy uvnitř \verb|HandleStorage|, kde jim je přiřazeno jejich unikátní \verb|HandleID| (16 bitové číslo). Toto číslo se také předává do user-space jako indentifikátor daného handle. Přístup k uloženým handle je následně možný pouze přes objekty \verb|HandleReference|. Struktura handlů je znázorněna diagramem tříd na obrázku \ref{fig:handle-class-d}.
 	
 	\begin{figure}[H]
 		\centering
 		\includegraphics[width=11cm]{handle-class-d.pdf}
-		\caption{Diagram tříd handlerů}
+		\caption{Diagram tříd handle}
 		\label{fig:handle-class-d}
 	\end{figure}
 	
 	Uvnitř \verb|HandleStorage| je pro každý handle uložen počet referencí na tento handle, který se inkrementuje vždy při vytvoření nové \verb|HandleReference| a dekrementuje při odstranění \verb|HandleReference|. Handly s nulovým počtem referencí jsou automaticky uzavřeny a odstraněny ze systému. 
 	
-	Každý proces si udržuje vlastní množinu referencí na handly, které byly v jeho kontextu vytvořeny nebo jinak získány (například při vytváření procesu předá rodičovský proces nově vytvořenému procesu handle na \verb|stdin| a \verb|stdout|). Tato množina se zároveň používá i pro zjištění, zda má proces k nějakému handlu vůbec přístup. Při odstranění nějakého procesu potom dojde k odstranění všech handle referencí uložených v jeho množině, a tím dojde automaticky i k odstranění všech handlů, které používal pouze daný proces. 
+	Každý proces si udržuje vlastní množinu referencí na handly, které byly v jeho kontextu vytvořeny nebo jinak získány (například při vytváření procesu předá rodičovský proces nově vytvořenému procesu handle na \verb|stdin| a \verb|stdout|). Tato množina se zároveň používá i pro zjištění, zda má proces k nějakému handlu vůbec přístup. Při odstranění procesu potom dojde k odstranění všech handle referencí uložených v jeho množině, a tím dojde automaticky i k odstranění všech handlů, které používal pouze daný proces. 
 	
-	Kernel se tak nespoléhá na "slušnost" user-space kódu, který by měl vždy použít \verb|CloseHandle|, ale dokáže při ukončení procesu automaticky uklidit všechny nepotřebné handly stejně jako reálný OS. Zároveň tento koncept umožňuje i efektivnější spolupráci více vláken najednou. Při práci s nějakým handle totiž není potřeba zamykat globální zámky, protože pokud pro tento handle existuje alespoň jeden objekt \verb|HandleReference|, tak je zaručeno, že žádné jiné vlákno nemůže tento handle nečekaně odstranit a způsobit tak pád celého systému.
+	Kernel se tak nespoléhá na \uv{slušnost} user-space kódu, který by měl vždy použít \verb|CloseHandle|, ale dokáže při ukončení procesu automaticky uklidit všechny nepotřebné handly stejně jako reálný OS. Zároveň tento koncept umožňuje i efektivnější spolupráci více vláken najednou. Při práci s nějakým handle totiž není potřeba zamykat globální zámky, protože pokud pro tento handle existuje alespoň jeden objekt \verb|HandleReference|, tak je zaručeno, že žádné jiné vlákno nemůže tento handle nečekaně odstranit a způsobit tak pád celého systému.
 	
 	\subsection{Procesy a vlákna}
 	
-	Procesy jsou uloženy v již zmíněném \verb|HandleStorage| a \verb|HandleID| je bráno jako PID. Stejně tak jsou uložena i vlákna a \verb|HandleID| představuje TID.
-	
-	Každé vlákno simulovaného OS využívá reálné vlákno fyzického OS (\verb|std::thread|). Kernel dále neobsahuje žádný platform-specific kód, kromě načítání "user.dll". Za hlavní vlákno procesu se považuje jeho první vlákno. Při vytvoření procesu je vždy vytvořeno i jeho hlavní vlákno.
+	Procesy jsou uloženy v již zmíněném \verb|HandleStorage| a \verb|HandleID| je bráno jako PID. Stejně tak jsou uložena i vlákna a \verb|HandleID| představuje TID. Každé vlákno simulovaného OS využívá reálné vlákno fyzického OS (\verb|std::thread|). Za hlavní vlákno procesu se považuje jeho první vlákno. Při vytvoření procesu je vždy vytvořeno i jeho hlavní vlákno.
 	
 	\subsubsection{API}
 	Procesy a vlákna jsou reprezentovány handly, API pro práci s nimi tedy očekává (případně vrací) patřičný handle.
@@ -94,48 +92,48 @@
 	\end{figure}
 	
 	\paragraph{Create Thread}
-	Vytvoří nové vlákno pro aktuální proces.
+	Vytvoří nové vlákno v kontextu aktuálního procesu.
 	
 	\paragraph{Wait For}
-	Počká na konec procesu, nebo vlákna.
+	Počká, až se zadané procesy nebo vlákna ukončí.
 	
 	\begin{figure}[H]
 		\centering
 		\includegraphics[width=14cm]{wait-for-proc.pdf}
-		\caption{Sekvenční diagram čekání na vlákno, nebo proces}
+		\caption{Sekvenční diagram čekání na vlákno nebo proces}
 		\label{fig:wait-for-proc}
 	\end{figure}
 	
 	\paragraph{Get Exit Code}
-	Získá exit kód procesu, nebo vlákna.
+	Získá návratový kód procesu nebo vlákna.
 	
 	\paragraph{Setup Signal}
-	Nastaví signal handler.
+	Nastaví signal handler. Signály se posílají vždy vláknům. Každé vlákno má svůj signal handler a seznam signálů (signal mask), které se mohou doručit tomuto handleru. Pro jednoduchost má každé vlákno pouze jeden signal handler společný pro všechny signály (v OS je definovaný stejně jen jeden signál). Při každém vstupu vlákna do jádra (syscall) se zkontroluje, zda nebyl danému vláknu odeslán nějaký signál, a pokud ano, tak se spustí jeho signal handler (pokud nějaký má a pokud je daný signál v seznamu signálů, které se mohou doručit). Stejná kontrola se provádí i při výstupu vlákna z jádra (konec syscallu). To kvůli delšímu blokování vlákna v jádře (například čekání na vstup od uživatele nebo čekání na ukončení jiného procesu nebo vlákna). Signal handler se tak spouští vždy v kontextu vlákna, ve kterém byl nastaven.
 	
 	\paragraph{Exit}
-	Nastaví exit kód aktuálímu vláknu.
+	Nastaví návratový kód aktuálního vlákna. Samotné ukončení musí vlákno provést samo návratem ze své vstupní funkce. Standardní knihovna C++ ani neposkytuje žádný způsob, jak ukončit běžící vlákno (\verb|std::thread|). Bylo by sice možné použít platform-specific funkce z WinAPI (\verb|ExitThread| nebo \verb|TerminateThread|), ale násilné ukončení běžícího vlákna představuje z pohledu jazyka C++ velký problém, protože se nemusejí zavolat všechny destruktory a nedojde tak k uvolnění všech zdrojů alokovaných v daném vlákně. Z tohoto důvodu se vlákno musí vždy ukončit samo, což by v reálném OS nebylo moc dobré. Návratový kód procesu je vždy návratový kód hlavního vlákna daného procesu. Proces se považuje za ukončený, pokud už neobsahuje žádná běžící vlákna.
 	
 	\paragraph{System Shutdown}
-	Pošle signál terminate na všechna vlákna v systému.
+	Uzavře všechny souborové handly a pošle signál \verb|Terminate| všem aktivním vláknům v systému.
 
 	
 	\subsection{Filesystem}
 	
-	Kernel obsahuje file system manager, který spravuje disky a souborové systémy na nich uložené. Pro přístup na disk je použito abstraktní API, které implementuje každý ovladač pro FS. Struktura je znázorněna na obrázku \ref{fig:fs-layers}. 
+	Kernel obsahuje file system manager, který spravuje disky a souborové systémy na nich uložené. Pro přístup na disk je použito abstraktní API (\verb|IFileSystem|), které implementuje každý ovladač pro FS. Struktura je znázorněna na obrázku \ref{fig:fs-layers}.
 	
 	\begin{figure}[H]
 		\centering
 		\includegraphics[height=9cm]{fs-layers.pdf}
-		\caption{Struktura správy souborového systému}
+		\caption{Struktura správy souborových systémů}
 		\label{fig:fs-layers}
 	\end{figure}
 
-	\paragraph{Soubory} Handly otevřených souborů jsou uloženy ve výše zmíněném \verb|HandleStorage| -- třída \verb|File|, která představuje handle otevřeného souboru, implementuje \verb|IFileHandle|. K synchronizaci přístupu více vlákny je použit mutex (\verb|std::mutex|). Struktura handleru je znázorněna na obrázku \ref{fig:file-handler}.
+	\paragraph{Soubory} Každý souborový handle implementuje rozhraní \verb|IFileHandle|. Handly otevřených souborů a adresářů jsou uloženy ve výše zmíněném \verb|HandleStorage|. Otevřený soubor nebo adresář je reprezentován objektem třídy \verb|File|, která také implementuje \verb|IFileHandle|. K synchronizaci přístupu více vlákny je použit mutex (\verb|std::mutex|). Struktura handlu je znázorněna na obrázku \ref{fig:file-handler}.
 	
 	\begin{figure}[H]
 		\centering
 		\includegraphics[width=11cm]{file-handler.pdf}
-		\caption{Struktura souborového handleru}
+		\caption{Struktura souborového handle}
 		\label{fig:file-handler}
 	\end{figure} 
 	
@@ -143,25 +141,25 @@
 	K datům každého souborového systému je přistupováno skrze API definované v \verb|IFileSystem|. Uživatelská vrstva pak k API přistupuje skrze systémová volání.
 	
 	\paragraph{Create}
-	Vytvoří soubor.
+	Vytvoří soubor nebo adresář.
 	
 	\paragraph{Query}
-	Získá info o souboru.
+	Získá informace o souboru nebo adresáři.
 	
 	\paragraph{Read}
-	Přečte soubor (nebo jeho část) do bufferu. Offset od kterého se čte je získán z handleru souboru.
+	Přečte soubor (nebo jeho část) do bufferu. Offset od kterého se čte je získán z handle souboru.
 	
 	\paragraph{ReadDir}
 	Načte soubory v adresáři.
 	
 	\paragraph{Remove}
-	Odstraní soubor, nebo prázdný adresář.
+	Odstraní soubor nebo prázdný adresář.
 	
 	\paragraph{Resize}
 	Změní velikost souboru.
 	
 	\paragraph{Write}
-	Zapíše data do souboru. Offset od kterého se zapisuje je získán z handleru souboru.
+	Zapíše data do souboru. Offset od kterého se zapisuje je získán z handle souboru.
 	
 	
 	\subsubsection{FAT}
@@ -187,7 +185,14 @@
 
 	\subsubsection{ProcFS}
 	\label{sec:proc-fs}
-	Přístup k aktuálně běžícím procesům je realizován přes virtuální souborový systém, který je mapován na disk \verb|0:\|. Struktura je znázorněna na \ref{fig:procfs-struct}. V kořenovém adresáři existuje pro každý běžící proces adresář pojmenovaný podle \verb|HandleID| daného procesu. Adresář pak obsahuje popisné soubory, ze kterých je možné o procesu přečíst: parametry se kterými byl spuštěn, aktuální pracovní adresář, jméno a počet běžících vláken.
+	Přístup k aktuálně běžícím procesům je realizován přes virtuální souborový systém, který je mapován na disk \verb|0:\|. Struktura je znázorněna na \ref{fig:procfs-struct}. V kořenovém adresáři existuje pro každý běžící proces adresář pojmenovaný podle \verb|HandleID| daného procesu. Dále je zde adresář \verb|self|, který vždy odkazuje na aktuální proces. Adresáře jednotlivých procesů obsahují popisné soubory, ze kterých je možné přečíst informace o daném procesu:
+	
+	\begin{itemize}
+		\item Název programu
+		\item Parametry se kterými byl proces spuštěn
+		\item Aktuální pracovní adresář
+		\item Počet běžících vláken
+	\end{itemize}
 	
 	\begin{figure}[H]
 		\centering
@@ -196,14 +201,14 @@
 		\label{fig:procfs-struct}
 	\end{figure}
 	
-	\verb|ProcFS| dědí od \verb|IFileSystem| a implementuje tedy celé API pro přístup k datům. Všechny funkce kromě \verb|query()|, \verb|read()| a \verb|readDir()| vrací chybu \verb|PERMISSION_DENIED|. K vypsání všech běžících procesů lze použít funkce \verb|readDir(0:\)|.
+	\verb|ProcFS| také dědí od \verb|IFileSystem| a implementuje tedy kompletní API pro přístup k datům. Celý \verb|ProcFS| je ale pouze pro čtení, takže všechny funkce kromě \verb|query()|, \verb|read()| a \verb|readDir()| vždy vrací chybu \verb|PERMISSION_DENIED|. K vypsání všech běžících procesů lze použít funkci \verb|readDir(0:\)|.
 	
 	Detaily libovolného procesu je možné získat voláním \verb|read(0:\<HandleID>\<proc_file_name>)|. Místo \verb|HandleID| lze použít \verb|self|, API pak vrací detaily o aktuálně běžícím procesu.
 
 	
 	\subsection{Roura}
 	
-	Roura je tvořena dvěma propojenými handly - \verb|PipeReadEnd| a \verb|PipeWriteEnd| viz obrázek \ref{fig:pipe-c}. Čtecí konec obsahuje buffer, do kterého se zapisuje ze zapisovacího konce (metoda \verb|push()|). Při uzavření jednoho konce se spojení mezi nimi přeruší a druhý konec tak ví, že už při prázdném bufferu nemá čekat na další data (čtecí konec) nebo při plném bufferu čekat na uvolnění místa (zapisovací konec).
+	Roura je tvořena dvěma propojenými handly - \verb|PipeReadEnd| a \verb|PipeWriteEnd| (viz obrázek \ref{fig:pipe-c}). Čtecí konec obsahuje buffer, do kterého se zapisuje ze zapisovacího konce. Při uzavření jednoho konce se spojení mezi nimi přeruší a druhý konec tak ví, že už při prázdném bufferu nemá čekat na další data (čtecí konec) nebo při plném bufferu čekat na uvolnění místa (zapisovací konec).
 	
 	\begin{figure}[H]
 		\centering
@@ -213,28 +218,25 @@
 	\end{figure}
 	
 	\section{RTL}
-	Runtime knihovna obaluje systémová volání a umožňuje tak pohodlnou komunikaci user space programů s jádrem. Obsahuje také struktury reprezentující proces, vlákno a soubor. Celá se nachází v \verb|rtl.h| a \verb|rtl.cpp|.
+	Runtime knihovna obaluje systémová volání a umožňuje tak pohodlnou komunikaci user-space programů s jádrem. Obsahuje také obalové třídy reprezentující proces, vlákno, soubor, adresář a rouru. Celá se nachází v \verb|rtl.h| a \verb|rtl.cpp|.
 	
 	\section{Shell a uživatelské příkazy}
-	Proces shellu je spuštěn po startu systému. Shell ve smyčce čte po řádcích ze standardního vstupu, řádky parsuje a spouští rozparsované příkazy. Pokud shell obdrží signál \verb|TERMINATE|, smyčka je ukončena a shell se vypne.
+	Proces shellu je spuštěn po startu systému. Shell ve smyčce čte po řádcích ze standardního vstupu, řádky parsuje a spouští rozparsované příkazy. Pokud shell obdrží signál \verb|Terminate|, smyčka je ukončena a shell se vypne.
 	
 	\subsection{Parser}
-	Implementován třídou \verb|ShellParser| v \verb|shell.cpp|. Počítá s řádkem o max délce 4096. Z rozparsované řádky vrátí strukturu obsahující příkazy, které se mají vykonat a případné přesměrování mezi nimi (roura, \verb|>|, \verb|>>|).
+	Implementován třídou \verb|ShellParser| v \verb|shell.cpp|. Z rozparsované řádky vrátí strukturu obsahující příkazy, které se mají vykonat a informace o případném přesměrování (\verb|<|, \verb|>|, \verb|>>|). Přesměrování \verb|>| nastaví velikost cílového souboru na 0 a pak do něj od začátku zapisuje. Přesměrování \verb|>>| nastaví pozici cílového souboru na jeho konec a pak za něj zapisuje data.
 	
 	\subsection{Implementace příkazů}
-	Každý příkaz je shellem spouštěn jako samostatný proces. Před spuštěním shell procesu nastaví handlery na vstup a výstup (stdIn/Out, roura, nebo soubory). Kód příkazu pak volá funkce RTL pro čtení a zápis. RTL si z kontextu aktuálně běžícího vlákna sama získá tyto handlery, takže kód příkazu neví kam zapisuje, nebo odkud čte.
-	
-	Přesměrování \verb|>| nastaví velikost cílového souboru na 0 a pak do něj od začátku zapisuje. Přesměrování \verb|>>| nastaví pozici cílového souboru na jeho konec a pak za něj zapisuje data.
+	Každý příkaz je shellem spouštěn jako samostatný proces. Před spuštěním shell procesu nastaví handly na standardní vstup a výstup. Kód příkazu pak volá funkce RTL pro čtení ze standardního vstupu a zápis do standardního výstupu. RTL si z kontextu aktuálně běžícího vlákna sama získá handly standardního vstupu a výstupu daného procesu, takže získání a uložení těchto handlů není potřeba řešit v kódu každého programu.
 	
 	\paragraph{dir}
-	Vypíše na výstup seznam souborů v zadaném adresáři. Cest lze příkazu skrze parametry předat více. Příkaz otevře zadaný adresář funkcí \verb|OpenDirectory(path)| z RTL. Obsah adresáře je získán RTL funkcí \verb|GetDirectoryContent(dirHandle)|.
+	Vypíše na výstup seznam souborů v zadaném adresáři. Cest lze příkazu skrze parametry předat více. Příkaz otevře zadaný adresář funkcí \verb|RTL::OpenDirectory(path)|. Obsah adresáře je získán funkcí \verb|RTL::GetDirectoryContent(dirHandle)|.
 	
 	\paragraph{echo}
-	Vypíše text ze vstupu na výstup. Echo lze vypnout příkazem \verb|@echo off| (a zapnout \verb|@echo on|). Proměnná, která drží stav echa je uložena v každé instanci shellu zvlášť. K výpisu na výstup je použita funkce RTL \verb|WriteFile(handle)|.
+	Vypíše text ze vstupu na výstup. Echo lze vypnout příkazem \verb|@echo off| (a zapnout \verb|@echo on|). Proměnná, která drží stav echa je uložena v každé instanci shellu zvlášť. K výpisu na výstup je použita funkce \verb|RTL::WriteStdOut()|.
 	
 	\paragraph{find}
-	Podporujeme pouze příkaz \verb|find /C /V ""|, tj. s prázdným řetězcem k vyhledání. Příkaz čte po řádkách text
-	ze vstupu dokud nepřijde EOF. Pak vypíše počet zadaných řádek.
+	Podporujeme pouze příkaz \verb|find /C /V ""|, tj. s prázdným řetězcem k vyhledání. Příkaz čte po řádcích text ze vstupu dokud nepřijde EOF. Pak vypíše počet zadaných řádek.
 	Význam přepínačů: 
 	\begin{itemize}
 		\item  \verb|/C| Počet řádek, které text obsahují,
@@ -246,16 +248,16 @@
 	Čte vstup dokud nepřijde EOF a udělá statistiku, kolikrát byl který byte na vstupu přítomen. Po dokončení statistiky je výsledek vypsán na výstup. 
 	
 	\paragraph{md}
-	Vytvoří zadaný adresář. Adresářů lze skrze parametry předat více. Příkaz vytvoří adresář voláním funkce RTL \verb|CreateDirectory(path)|.
+	Vytvoří zadaný adresář. Adresářů lze skrze parametry předat více. Příkaz vytvoří adresář voláním funkce \verb|RTL::CreateDirectory(path)|.
 	
 	\paragraph{rd}
-	Smaže zadaný soubor. Použitím parametru \verb|/S| lze rekurzivně mazat adresářové stromy. Soubor je smazán voláním funkce RTL \verb|DeleteDirectory(path)|.
+	Smaže zadaný soubor. Použitím parametru \verb|/S| lze rekurzivně mazat adresářové stromy. Soubor je smazán voláním funkce \verb|RTL::DeleteDirectory(path)|.
 	
 	\paragraph{rgen}
 	Generuje náhodná čísla v rozmezí $<0;1)$, která vypisuje na výstup. Čísla jsou generována dokud na vstupu není EOF.
 	
 	\paragraph{shutdown}
-	Vypne systém voláním funkce RTL \verb|Shutdown()|.
+	Vypne systém voláním funkce \verb|RTL::Shutdown()|.
 	
 	\paragraph{sort}
 	Čte řádky ze vstupu a řadí je. Po přečtení EOF vypíše seřazené řádky na výstup.
@@ -264,13 +266,6 @@
 	Zavolá \verb|OpenDirectory("0:")| čímž otevře vituální disk 0 (viz sekce \ref{sec:proc-fs}), načte jeho obsah (\verb|GetDirectoryContent()|) a vypíše jej na výstup.
 	
 	\paragraph{type}
-	Vypíše na výstup obsah zadaných souborů. K otevření souboru je použita funkce RTL \verb|OpenFile(path)|, k získání obsahu pak \verb|ReadFile(handle, buffer)|.
-	
-	\section{Závěr}
-	Simulátor operačního systému se nám podařilo úspěšně implementovat. 
-	
-	TODO: co bychom mohli příště udělat líp 
-	
-	TODO: co bylo nejzajímavější
+	Vypíše na výstup obsah zadaných souborů. K otevření souboru je použita funkce \verb|RTL::OpenFile(path)|, k získání obsahu pak \verb|RTL::ReadFile(handle, buffer)|.
 	
 \end{document}
