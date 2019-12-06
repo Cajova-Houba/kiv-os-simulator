@@ -55,7 +55,9 @@
 	\end{enumerate}
 
 	\section{Kernel}
-	Jádro poskytuje API pro správu procesů a vláken, vytvoření pipe a přístup k disku. TODO: trochu rozvést
+	Jádro poskytuje API pro správu procesů a vláken, vytvoření pipe a přístup k disku, ke kterému je možné z user space přistoupit systémovým voláním.
+	
+	\subsection{Handlery}
 	
 	Základním konceptem kernelu je třída \verb|HandleStorage| společně s \verb|HandleReference|. Každá třída reprezentující nějaký handle (soubor, proces, vlákno, ...) implementuje rozhraní \verb|IHandle|. Všechny instance těchto tříd jsou následně uloženy uvnitř \verb|HandleStorage|, kde jim je přiřazeno jejich unikátní \verb|HandleID| (16 bitové číslo). Přístup k uloženým handle je následně možný pouze přes objekty \verb|HandleReference|. Struktura handlerů je znázorněna diagramem tříd na obrázku \ref{fig:handle-class-d}.
 	
@@ -79,7 +81,7 @@
 	Každé vlákno simulovaného OS využívá reálné vlákno fyzického OS (\verb|std::thread|). Kernel dále neobsahuje žádný platform-specific kód, kromě načítání "user.dll". Za hlavní vlákno procesu se považuje jeho první vlákno. Při vytvoření procesu je vždy vytvořeno i jeho hlavní vlákno.
 	
 	\subsubsection{API}
-	K API je přistupováno skrze systémová volání.
+	Procesy a vlákna jsou reprezentovány handly, API pro práci s nimi tedy očekává (případně vrací) patřičný handle.
 	
 	\paragraph{Create Process}
 	Vytvoří nový proces.
@@ -128,7 +130,14 @@
 		\label{fig:fs-layers}
 	\end{figure}
 
-	\paragraph{Otevřené soubory} Handly uložených souborů jsou uložené ve výše zmíněném \verb|HandleStorage| -- třída \verb|File|, která představuje handle otevřeného souboru, dědí od \verb|IFileHandle|. K synchronizaci přístupu více vlákny je použit mutex (\verb|std::mutex|). 
+	\paragraph{Soubory} Handly otevřených souborů jsou uloženy ve výše zmíněném \verb|HandleStorage| -- třída \verb|File|, která představuje handle otevřeného souboru, implementuje \verb|IFileHandle|. K synchronizaci přístupu více vlákny je použit mutex (\verb|std::mutex|). Struktura handleru je znázorněna na obrázku \ref{fig:file-handler}.
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=11cm]{file-handler.pdf}
+		\caption{Struktura souborového handleru}
+		\label{fig:file-handler}
+	\end{figure} 
 	
 	\subsubsection{API}
 	K datům každého souborového systému je přistupováno skrze API definované v \verb|IFileSystem|. Uživatelská vrstva pak k API přistupuje skrze systémová volání.
@@ -140,23 +149,24 @@
 	Získá info o souboru.
 	
 	\paragraph{Read}
-	Přečte soubor (nebo jeho část) do bufferu.
+	Přečte soubor (nebo jeho část) do bufferu. Offset od kterého se čte je získán z handleru souboru.
 	
 	\paragraph{ReadDir}
 	Načte soubory v adresáři.
 	
 	\paragraph{Remove}
-	Odstraní soubor, nebo adresář.
+	Odstraní soubor, nebo prázdný adresář.
 	
 	\paragraph{Resize}
 	Změní velikost souboru.
 	
 	\paragraph{Write}
-	Zapíše data do souboru.
+	Zapíše data do souboru. Offset od kterého se zapisuje je získán z handleru souboru.
+	
 	
 	\subsubsection{FAT}
 	
-	Jako filesystem jsme zvolili FAT implementovanou v rámci KIV/ZOS. Rozložení souborového systému na disku je znázorněno na obrázku \ref{fig:fat-disk-struct}. V původní specifikaci je na disku uložena alespoň jedna další kopie FAT tabulky, která se používá ke kontrole bloků dat. Protože kontrolu poškozených dat v práci neprovádíme, rozhodli jsme se ukládat pouze jednu kopii.
+	Jako hlavní souborový systém jsme zvolili FAT implementovanou v rámci KIV/ZOS. Rozložení souborového systému na disku je znázorněno na obrázku \ref{fig:fat-disk-struct}. V původní specifikaci je na disku uložena alespoň jedna další kopie FAT tabulky, která se používá ke kontrole bloků dat. Protože kontrolu poškozených dat v práci neprovádíme, rozhodli jsme se ukládat pouze jednu kopii.
 	
 	\begin{figure}[H]
 		\centering
@@ -203,17 +213,21 @@
 	\end{figure}
 	
 	\section{RTL}
-	Vrstva mezi uživatelskými programy a kernelem (nečekaně).
+	Vrstva mezi uživatelskými programy a kernelem (nečekaně). Wrappery pro systémová volání. Datová reprezentace souborů a procesů pro user space. Překlad chybových stavů na text.
 	
 	TODO: něco napsat sem? Asi o práci se vstupem/výstupem
 	
 	\section{Shell a uživatelské příkazy}
+	Proces shellu je spuštěn po startu systému. Shell ve smyčce čte po řádcích ze standardního vstupu, řádky parsuje a spouští rozparsované příkazy. Pokud shell obdrží signál \verb|TERMINATE|, smyčka je ukončena a shell se vypne.
 	
 	\subsection{Parser}
 	TODO: informace o parseru
+	Implementován třídou \verb|ShellParser| v \verb|shell.cpp|. Počítá s řádkem o max délce 4096. Z rozparsované řádky vrátí strukturu obsahující příkazy, které se mají vykonat a případné přesměrování mezi nimi (roura, \verb|>|, \verb|>>|).
 	
 	\subsection{Implementace příkazů}
-	TODO: nějaký krátký info k příkazům, jak se předává vstup/výstup příkazům
+	Každý příkaz je shellem spouštěn jako samostatný proces. Před spuštěním shell procesu nastaví handlery na vstup a výstup (stdIn/Out, roura, nebo soubory). Kód příkazu pak volá funkce RTL pro čtení a zápis. RTL si z kontextu aktuálně běžícího vlákna sama získá tyto handlery, takže kód příkazu neví kam zapisuje, nebo odkud čte.
+	
+	Přesměrování \verb|>| nastaví velikost cílového souboru na 0 a pak do něj od začátku zapisuje. Přesměrování \verb|>>| nastaví pozici cílového souboru na jeho konec a pak za něj zapisuje data.
 	
 	\paragraph{dir}
 	Vypíše na výstup seznam souborů v zadaném adresáři. Cest lze příkazu skrze parametry předat více. Příkaz otevře zadaný adresář funkcí \verb|OpenDirectory(path)| z RTL. Obsah adresáře je získán RTL funkcí \verb|GetDirectoryContent(dirHandle)|.
@@ -222,7 +236,14 @@
 	Vypíše text ze vstupu na výstup. Echo lze vypnout příkazem \verb|@echo off| (a zapnout \verb|@echo on|). Proměnná, která drží stav echa je uložena v každé instanci shellu zvlášť. K výpisu na výstup je použita funkce RTL \verb|WriteFile(handle)|.
 	
 	\paragraph{find}
-	Najde zadaný text v souboru. Parametry \verb|/C| \verb|/V|.
+	Podporujeme pouze příkaz \verb|find /C /V ""|, tj. s prázdným řetězcem k vyhledání. Příkaz čte po řádkách text
+	ze vstupu dokud nepřijde EOF. Pak vypíše počet zadaných řádek.
+	Význam přepínačů: 
+	\begin{itemize}
+		\item  \verb|/C| Počet řádek, které text obsahují,
+		\item \verb|/V| Zobrazí řádky, které zadaný text neobsahují.
+	\end{itemize}
+	
 	
 	\paragraph{freq}
 	Čte vstup dokud nepřijde EOF a udělá statistiku, kolikrát byl který byte na vstupu přítomen. Po dokončení statistiky je výsledek vypsán na výstup. 
