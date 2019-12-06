@@ -287,6 +287,7 @@ RTL::Handle RTL::GetStdOutHandle()
 std::string RTL::GetWorkingDirectory()
 {
 	char buffer[4096];
+	buffer[0] = '\0';
 
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
@@ -576,7 +577,7 @@ bool RTL::DeleteDirectory(const char *path, bool recursively)
 
 RTL::Pipe RTL::CreatePipe()
 {
-	kiv_os::THandle handles[2];
+	kiv_os::THandle handles[2] = { 0, 0 };
 
 	kiv_hal::TRegisters registers;
 	registers.rax.h = static_cast<uint8_t>(kiv_os::NOS_Service_Major::File_System);
