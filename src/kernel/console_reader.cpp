@@ -1,4 +1,3 @@
-#include <atomic>
 #include <thread>
 #include <new>
 
@@ -6,8 +5,22 @@
 
 #include "console_reader.h"
 
-static ConsoleReader *g_pInstance;
-static std::atomic<bool> g_isRunning;
+class ReaderCountGuard
+{
+	ConsoleReader *m_self;
+
+public:
+	ReaderCountGuard(ConsoleReader *self)
+	: m_self(self)
+	{
+		m_self->m_readerCount++;
+	}
+
+	~ReaderCountGuard()
+	{
+		m_self->m_readerCount--;
+	}
+};
 
 static void HALWriteChar(char ch)
 {
@@ -35,27 +48,14 @@ static bool HALReadChar(char & ch)
 	return true;
 }
 
-static bool IsRunning()
+static bool HALReadLine(std::string & line)
 {
-	return g_isRunning.load(std::memory_order_relaxed);
-}
-
-static void SetRunning(bool isRunning)
-{
-	g_isRunning.store(isRunning, std::memory_order_relaxed);
-}
-
-static void ReaderWorker()
-{
-	std::string line;
-
-	while (IsRunning())
+	while (true)
 	{
 		char ch;
 		if (!HALReadChar(ch))
 		{
-			SetRunning(false);
-			break;
+			return false;
 		}
 
 		bool isLineComplete = false;
@@ -106,19 +106,63 @@ static void ReaderWorker()
 
 		if (isLineComplete)
 		{
-			g_pInstance->pushLine(std::move(line));
-			line.clear();
+			break;
 		}
 	}
+
+	return true;
+}
+
+void ConsoleReader::workerLoop()
+{
+	std::string line;
+
+	while (waitForReader())
+	{
+		if (!HALReadLine(line))
+		{
+			setOpen(false);
+			break;
+		}
+
+		pushLine(std::move(line));
+		line.clear();
+	}
+}
+
+bool ConsoleReader::waitForReader()
+{
+	std::unique_lock<std::mutex> lock(m_mutex);
+
+	while (isOpen())
+	{
+		m_workerCV.wait(lock);
+
+		if (getReaderCount() > 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void ConsoleReader::readLine(char *buffer, size_t bufferSize, size_t *pRead)
 {
 	std::unique_lock<std::mutex> lock(m_mutex);
 
-	while (m_lineQueue.empty() && IsRunning())
+	if (m_lineQueue.empty() && isOpen())
 	{
-		m_cv.wait(lock);
+		ReaderCountGuard readerCountGuard(this);
+
+		// potřebujeme něco přečíst ze vstupu, takže vzbudíme čtecí vlákno
+		m_workerCV.notify_one();
+
+		do
+		{
+			m_readerCV.wait(lock);
+		}
+		while (m_lineQueue.empty() && isOpen());
 	}
 
 	size_t length = 0;
@@ -126,6 +170,7 @@ void ConsoleReader::readLine(char *buffer, size_t bufferSize, size_t *pRead)
 	if (!m_lineQueue.empty())
 	{
 		std::string & line = m_lineQueue.front();
+
 		length = (line.length() < bufferSize) ? line.length() : bufferSize;
 
 		line.copy(buffer, length);
@@ -153,15 +198,21 @@ void ConsoleReader::pushLine(std::string && line)
 	m_lineQueue.push(std::move(line));
 
 	lock.unlock();
-	m_cv.notify_one();
+	m_readerCV.notify_one();
 }
 
 void ConsoleReader::close()
 {
-	SetRunning(false);
+	if (isOpen())
+	{
+		setOpen(false);
 
-	m_cv.notify_all();
+		m_readerCV.notify_all();
+		m_workerCV.notify_all();
+	}
 }
+
+static ConsoleReader *g_pInstance;
 
 ConsoleReader & ConsoleReader::GetInstance()
 {
@@ -169,9 +220,9 @@ ConsoleReader & ConsoleReader::GetInstance()
 	{
 		g_pInstance = new ConsoleReader;
 
-		SetRunning(true);
+		g_pInstance->setOpen(true);
 
-		std::thread(ReaderWorker).detach();
+		std::thread(&workerLoop, g_pInstance).detach();
 	}
 
 	return *g_pInstance;

@@ -15,6 +15,11 @@ class Console : public IFileHandle
 public:
 	Console();
 
+	~Console()
+	{
+		close();
+	}
+
 	EFileHandle getFileHandleType() const override
 	{
 		return EFileHandle::CONSOLE;
