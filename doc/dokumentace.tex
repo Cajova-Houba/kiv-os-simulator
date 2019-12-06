@@ -175,7 +175,7 @@
 		\label{fig:fat-disk-struct}
 	\end{figure}
 
-	Velikost jednoho datového clusteru je dána velikostí sektorů na disku a platí, že 1 cluster = N $\times$ sektor, kde $N$ je vypočítané při inicializaci souborového systému na disku. Root adresář začíná na clusteru 0. Metadata každého souboru jsou reprezentována strukturou \verb|Directory| (obrázek \ref{fig:dir-c}). Adresáře jsou od souborů odlišeny nastaveným bitem ve \verb|flags|.
+	Velikost jednoho datového clusteru je dána velikostí sektorů na disku a platí, že 1 cluster = N $\times$ sektor, kde $N$ je vypočítané při inicializaci souborového systému na disku. Root adresář začíná na clusteru 0. Metadata každého souboru jsou reprezentována strukturou \verb|Directory| (obrázek \ref{fig:dir-c}). Adresáře jsou od souborů odlišeny nastaveným bitem ve \verb|flags|. Jméno souboru může být maximálně 11 znaků (12. znak je \verb|'\0'|).
 	
 	\begin{figure}[H]
 		\centering
@@ -213,15 +213,12 @@
 	\end{figure}
 	
 	\section{RTL}
-	Vrstva mezi uživatelskými programy a kernelem (nečekaně). Wrappery pro systémová volání. Datová reprezentace souborů a procesů pro user space. Překlad chybových stavů na text.
-	
-	TODO: něco napsat sem? Asi o práci se vstupem/výstupem
+	Runtime knihovna obaluje systémová volání a umožňuje tak pohodlnou komunikaci user space programů s jádrem. Obsahuje také struktury reprezentující proces, vlákno a soubor. Celá se nachází v \verb|rtl.h| a \verb|rtl.cpp|.
 	
 	\section{Shell a uživatelské příkazy}
 	Proces shellu je spuštěn po startu systému. Shell ve smyčce čte po řádcích ze standardního vstupu, řádky parsuje a spouští rozparsované příkazy. Pokud shell obdrží signál \verb|TERMINATE|, smyčka je ukončena a shell se vypne.
 	
 	\subsection{Parser}
-	TODO: informace o parseru
 	Implementován třídou \verb|ShellParser| v \verb|shell.cpp|. Počítá s řádkem o max délce 4096. Z rozparsované řádky vrátí strukturu obsahující příkazy, které se mají vykonat a případné přesměrování mezi nimi (roura, \verb|>|, \verb|>>|).
 	
 	\subsection{Implementace příkazů}
